@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
       - name: celery
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:357c825-20250225
         command: ["celery", "-A", "drf", "worker"]
         args: ["--queues=mojro_queue,mojro_pod_processing_queue", "--concurrency=8"]
         envFrom:
@@ -69,7 +69,7 @@ spec:
     spec:
       containers:
       - name: celery
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:357c825-20250225
         command: ["celery", "-A", "drf", "worker"]
         args: ["--queues=logs_queue,salesforce_queue,moengage_queue,default", "--concurrency=4"]
         envFrom:
@@ -112,7 +112,7 @@ spec:
     spec:
       containers:
       - name: celery-beat-backend
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:357c825-20250225
         command: ["celery", "-A", "drf", "beat", "--loglevel=info"]
         envFrom:
         - secretRef:
