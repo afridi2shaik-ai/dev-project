@@ -23,14 +23,14 @@ spec:
     spec:
       initContainers:
       - name: copy-files
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:357c825-20250225
         command: ["/bin/sh", "-c", "cp -R /app/* /mnt/app"]
         volumeMounts:
         - name: app-volume-admin
           mountPath: /mnt/app
       containers:
       - name: admin
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:357c825-20250225
         ports:
         - containerPort: 8000
         command: ["gunicorn", "drf.wsgi:application", "--bind", "0.0.0.0:8000", "--chdir", "/app"]
