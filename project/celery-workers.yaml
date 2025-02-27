@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staging-celery-mojro-worker
+  labels:
+    app: celery
+    role: mojro-worker
+    app.kubernetes.io/component: staging-celery-mojro-worker
+    version: standard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery
+      role: mojro-worker
+      app.kubernetes.io/component: staging-celery-mojro-worker
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: celery
+        role: mojro-worker
+        app.kubernetes.io/component: staging-celery-mojro-worker
+        version: standard
+    spec:
+      containers:
+      - name: celery
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        command: ["celery", "-A", "drf", "worker"]
+        args: ["--queues=mojro_queue,mojro_pod_processing_queue", "--concurrency=8"]
+        envFrom:
+        - secretRef:
+            name: backend-env  # Reference the Secret
+        resources:
+            requests:
+              memory: "500Mi" 
+              cpu: "100m"   
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+---
+  
+ 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staging-celery-other-workers
+  labels:
+    app: celery
+    role: other-workers
+    app.kubernetes.io/component: staging-celery-other-workers
+    version: standard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery
+      role: other-workers
+      app.kubernetes.io/component: staging-celery-other-workers
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: celery
+        role: other-workers
+        app.kubernetes.io/component: staging-celery-other-workers
+        version: standard
+    spec:
+      containers:
+      - name: celery
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        command: ["celery", "-A", "drf", "worker"]
+        args: ["--queues=logs_queue,salesforce_queue,moengage_queue,default", "--concurrency=4"]
+        envFrom:
+        - secretRef:
+            name: backend-env  # Reference the Secret
+        resources:
+            requests:
+              memory: "500Mi"
+              cpu: "100m"  
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+ 
+ 
+---
+ 
+# celery beat deployment file
+ 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staging-celery-beat-backend
+  labels:
+    app: celery-beat-backend
+    app.kubernetes.io/component: staging-celery-beat-backend
+    version: standard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat-backend
+      app.kubernetes.io/component: staging-celery-beat-backend
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: celery-beat-backend
+        app.kubernetes.io/component: staging-celery-beat-backend
+        version: standard
+    spec:
+      containers:
+      - name: celery-beat-backend
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        command: ["celery", "-A", "drf", "beat", "--loglevel=info"]
+        envFrom:
+        - secretRef:
+            name: backend-env  # Reference the Secret
+        resources:
+            requests:
+              memory: "500Mi"
+              cpu: "100m"  
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+---

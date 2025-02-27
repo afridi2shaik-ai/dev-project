@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: staging-mojro-delivery
+  labels:
+    app: mojro-delivery
+    app.kubernetes.io/component: staging-mojro-delivery
+    version: standard  
+spec:
+  serviceName: "staging-mojro-delivery-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mojro-delivery
+      app.kubernetes.io/component: staging-mojro-delivery
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: mojro-delivery
+        app.kubernetes.io/component: staging-mojro-delivery
+        version: standard
+    spec:
+      initContainers:
+      - name: copy-files
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        command: ["/bin/sh", "-c", "cp -R /app/* /mnt/app"]
+        volumeMounts:
+        - name: app-volume-mojro
+          mountPath: /mnt/app
+      containers:
+      - name: mojro-delivery
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:9a15eee-20250225
+        ports:
+        - containerPort: 8000
+        command: ["gunicorn", "drf.wsgi:application", "--bind", "0.0.0.0:8000", "--chdir", "/app"]
+        envFrom:
+        - secretRef:
+            name: backend-env
+        volumeMounts:
+        - name: app-volume-mojro
+          mountPath: /app
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5  
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5    
+  volumeClaimTemplates:
+  - metadata:
+      name: app-volume-mojro
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: ebs-sc
+      resources:
+        requests:
+          storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-mojro-delivery-headless  # This must match `serviceName` in StatefulSet
+spec:
+  clusterIP: None  # This makes it a headless service
+  selector:
+    app: mojro-delivery
+    app.kubernetes.io/component: staging-mojro-delivery
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+ 
+---
+ 
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-mojro-delivery-service
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: "/api/v1/ping"
+    alb.ingress.kubernetes.io/healthcheck-port: "8000"
+spec:
+  selector:
+    app: mojro-delivery
+    app.kubernetes.io/component: staging-mojro-delivery    
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
