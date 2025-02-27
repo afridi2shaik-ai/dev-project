@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: staging-backend-web
+  name: staging-backend-web-previous
   labels:
     app: staging-backend-web
     app.kubernetes.io/component: staging-backend-web
@@ -95,7 +95,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: staging-backend-web
+  name: staging-backend-web-previous
   annotations:
     alb.ingress.kubernetes.io/healthcheck-path: "/api/v1/ping"
     alb.ingress.kubernetes.io/healthcheck-port: "8000"
