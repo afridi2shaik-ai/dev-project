@@ -23,14 +23,14 @@ spec:
     spec:
       initContainers:
       - name: copy-files
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:0e9586b-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:68b549e-20250225
         command: ["/bin/sh", "-c", "cp -R /app/* /mnt/app"]
         volumeMounts:
         - name: app-volume
           mountPath: /mnt/app
       containers:
       - name: backend-web
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:0e9586b-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:68b549e-20250225
         ports:
         - containerPort: 8000
         command: ["gunicorn", "drf.wsgi:application", "--bind", "0.0.0.0:8000", "--chdir", "/app"]
@@ -139,7 +139,7 @@ spec:
     spec:
       containers:
       - name: celery
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:0e9586b-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:68b549e-20250225
         command: ["celery", "-A", "drf", "worker"]
         args: ["--queues=mojro_queue,mojro_pod_processing_queue", "--concurrency=8"]
         envFrom:
@@ -183,7 +183,7 @@ spec:
     spec:
       containers:
       - name: celery
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:0e9586b-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:68b549e-20250225
         command: ["celery", "-A", "drf", "worker"]
         args: ["--queues=logs_queue,salesforce_queue,moengage_queue,default", "--concurrency=4"]
         envFrom:
@@ -226,7 +226,7 @@ spec:
     spec:
       containers:
       - name: celery-beat-backend
-        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:0e9586b-20250225
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:68b549e-20250225
         command: ["celery", "-A", "drf", "beat", "--loglevel=info"]
         envFrom:
         - secretRef:
