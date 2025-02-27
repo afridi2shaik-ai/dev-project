@@ -1,0 +1,605 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: staging-admin
+  labels:
+    app: admin
+    app.kubernetes.io/component: staging-admin
+    version: standard  
+spec:
+  serviceName: "admin-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin
+      app.kubernetes.io/component: staging-admin
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: admin
+        app.kubernetes.io/component: staging-admin
+        version: standard
+    spec:
+      initContainers:
+      - name: copy-files
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        command: ["/bin/sh", "-c", "cp -R /app/* /mnt/app"]
+        volumeMounts:
+        - name: app-volume-admin
+          mountPath: /mnt/app
+      containers:
+      - name: admin
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        ports:
+        - containerPort: 8000
+        command: ["gunicorn", "drf.wsgi:application", "--bind", "0.0.0.0:8000", "--chdir", "/app"]
+        envFrom:
+        - secretRef:
+            name: backend-env
+        volumeMounts:
+        - name: app-volume-admin
+          mountPath: /app
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5  
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5    
+  volumeClaimTemplates:
+  - metadata:
+      name: app-volume-admin
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: ebs-sc
+      resources:
+        requests:
+          storage: 5Gi
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-headless  # This must match `serviceName` in StatefulSet
+spec:
+  clusterIP: None  # This makes it a headless service
+  selector:
+    app: admin
+    app.kubernetes.io/component: staging-admin
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+ 
+---
+ 
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-admin-service
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: "/api/v1/ping"
+    alb.ingress.kubernetes.io/healthcheck-port: "8000"
+
+spec:
+  selector:
+    app: admin
+    app.kubernetes.io/component: staging-admin    
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+
+---
+
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: staging-otp-redirection
+  labels:
+    app: otp-redirection
+    app.kubernetes.io/component: staging-otp-redirection
+    version: standard  
+spec:
+  serviceName: "otp-redirection-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otp-redirection
+      app.kubernetes.io/component: staging-otp-redirection
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: otp-redirection
+        app.kubernetes.io/component: staging-otp-redirection
+        version: standard
+    spec:
+      initContainers:
+      - name: copy-files
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        command: ["/bin/sh", "-c", "cp -R /app/* /mnt/app"]
+        volumeMounts:
+        - name: app-volume-otp-redirection
+          mountPath: /mnt/app
+      containers:
+      - name: otp-redirection
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        ports:
+        - containerPort: 8000
+        command: ["gunicorn", "drf.wsgi:application", "--bind", "0.0.0.0:8000", "--chdir", "/app"]
+        envFrom:
+        - secretRef:
+            name: backend-env
+        volumeMounts:
+        - name: app-volume-otp-redirection
+          mountPath: /app
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5  
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5    
+  volumeClaimTemplates:
+  - metadata:
+      name: app-volume-otp-redirection
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: ebs-sc
+      resources:
+        requests:
+          storage: 5Gi
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: otp-redirection-headless  # This must match `serviceName` in StatefulSet
+spec:
+  clusterIP: None  # This makes it a headless service
+  selector:
+    app: otp-redirection
+    app.kubernetes.io/component: staging-otp-redirection
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+---
+ 
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-otp-redirection-service
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: "/api/v1/ping"
+    alb.ingress.kubernetes.io/healthcheck-port: "8000"
+
+spec:
+  selector:
+    app: otp-redirection
+    app.kubernetes.io/component: staging-otp-redirection    
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: staging-mojro-delivery
+  labels:
+    app: mojro-delivery
+    app.kubernetes.io/component: staging-mojro-delivery
+    version: standard  
+spec:
+  serviceName: "staging-mojro-delivery-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mojro-delivery
+      app.kubernetes.io/component: staging-mojro-delivery
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: mojro-delivery
+        app.kubernetes.io/component: staging-mojro-delivery
+        version: standard
+    spec:
+      initContainers:
+      - name: copy-files
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        command: ["/bin/sh", "-c", "cp -R /app/* /mnt/app"]
+        volumeMounts:
+        - name: app-volume-mojro
+          mountPath: /mnt/app
+      containers:
+      - name: mojro-delivery
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        ports:
+        - containerPort: 8000
+        command: ["gunicorn", "drf.wsgi:application", "--bind", "0.0.0.0:8000", "--chdir", "/app"]
+        envFrom:
+        - secretRef:
+            name: backend-env
+        volumeMounts:
+        - name: app-volume-mojro
+          mountPath: /app
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5  
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5    
+  volumeClaimTemplates:
+  - metadata:
+      name: app-volume-mojro
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: ebs-sc
+      resources:
+        requests:
+          storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-mojro-delivery-headless  # This must match `serviceName` in StatefulSet
+spec:
+  clusterIP: None  # This makes it a headless service
+  selector:
+    app: mojro-delivery
+    app.kubernetes.io/component: staging-mojro-delivery
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+ 
+---
+ 
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-mojro-delivery-service
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: "/api/v1/ping"
+    alb.ingress.kubernetes.io/healthcheck-port: "8000"
+spec:
+  selector:
+    app: mojro-delivery
+    app.kubernetes.io/component: staging-mojro-delivery    
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: staging-backend-web
+  labels:
+    app: staging-backend-web
+    app.kubernetes.io/component: staging-backend-web
+    version: standard  
+spec:
+  serviceName: "staging-backend-web-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-web
+      app.kubernetes.io/component: staging-backend-web
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: backend-web
+        app.kubernetes.io/component: staging-backend-web
+        version: standard
+    spec:
+      initContainers:
+      - name: copy-files
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        command: ["/bin/sh", "-c", "cp -R /app/* /mnt/app"]
+        volumeMounts:
+        - name: app-volume
+          mountPath: /mnt/app
+      containers:
+      - name: backend-web
+        image: 334617736223.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-staging:6a2d830-20250221
+        ports:
+        - containerPort: 8000
+        command: ["gunicorn", "drf.wsgi:application", "--bind", "0.0.0.0:8000", "--chdir", "/app"]
+        envFrom:
+        - secretRef:
+            name: backend-env
+        volumeMounts:
+        - name: app-volume
+          mountPath: /app
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5  
+        livenessProbe:
+          httpGet:
+            path: /api/v1/ping  
+            port: 8000
+          initialDelaySeconds: 60 
+          periodSeconds: 10  
+          failureThreshold: 5    
+  volumeClaimTemplates:
+  - metadata:
+      name: app-volume
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: ebs-sc
+      resources:
+        requests:
+          storage: 5Gi
+ 
+ 
+---
+
+# backend web headless service file for statefulset
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-backend-web-headless  # This must match `serviceName` in StatefulSet
+spec:
+  clusterIP: None  # This makes it a headless service
+  selector:
+    app: backend-web
+    app.kubernetes.io/component: staging-backend-web
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+---
+ 
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-backend-web
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: "/api/v1/ping"
+    alb.ingress.kubernetes.io/healthcheck-port: "8000"
+spec:
+  selector:
+    app: backend-web
+    app.kubernetes.io/component: staging-backend-web    
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+ 
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: staging-backend-web-service
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: "/api/v1/ping"
+    alb.ingress.kubernetes.io/healthcheck-port: "8000"
+spec:
+  selector:
+    app: backend-web
+    app.kubernetes.io/component: staging-backend-web    
+    version: standard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staging-celery-mojro-worker
+  labels:
+    app: celery
+    role: mojro-worker
+    app.kubernetes.io/component: staging-celery-mojro-worker
+    version: standard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery
+      role: mojro-worker
+      app.kubernetes.io/component: staging-celery-mojro-worker
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: celery
+        role: mojro-worker
+        app.kubernetes.io/component: staging-celery-mojro-worker
+        version: standard
+    spec:
+      containers:
+      - name: celery
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/pybackend-repo-dev:4d26dbb-20250203
+        command: ["celery", "-A", "drf", "worker"]
+        args: ["--queues=mojro_queue,mojro_pod_processing_queue", "--concurrency=8"]
+        envFrom:
+        - secretRef:
+            name: backend-env  # Reference the Secret
+        resources:
+            requests:
+              memory: "500Mi" 
+              cpu: "100m"   
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+---
+  
+ 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staging-celery-other-workers
+  labels:
+    app: celery
+    role: other-workers
+    app.kubernetes.io/component: staging-celery-other-workers
+    version: standard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery
+      role: other-workers
+      app.kubernetes.io/component: staging-celery-other-workers
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: celery
+        role: other-workers
+        app.kubernetes.io/component: staging-celery-other-workers
+        version: standard
+    spec:
+      containers:
+      - name: celery
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/blue-green-repo:<IMAGE_TAG>
+        command: ["celery", "-A", "drf", "worker"]
+        args: ["--queues=logs_queue,salesforce_queue,moengage_queue,default", "--concurrency=4"]
+        envFrom:
+        - secretRef:
+            name: backend-env  # Reference the Secret
+        resources:
+            requests:
+              memory: "500Mi"
+              cpu: "100m"  
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+ 
+ 
+---
+ 
+# celery beat deployment file
+ 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staging-celery-beat-backend
+  labels:
+    app: celery-beat-backend
+    app.kubernetes.io/component: staging-celery-beat-backend
+    version: standard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat-backend
+      app.kubernetes.io/component: staging-celery-beat-backend
+      version: standard
+  template:
+    metadata:
+      labels:
+        app: celery-beat-backend
+        app.kubernetes.io/component: staging-celery-beat-backend
+        version: standard
+    spec:
+      containers:
+      - name: celery-beat-backend
+        image: 183631328007.dkr.ecr.ap-south-1.amazonaws.com/blue-green-repo:<IMAGE_TAG>
+        command: ["celery", "-A", "drf", "beat", "--loglevel=info"]
+        envFrom:
+        - secretRef:
+            name: backend-env  # Reference the Secret
+        resources:
+            requests:
+              memory: "500Mi"
+              cpu: "100m"  
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+---
