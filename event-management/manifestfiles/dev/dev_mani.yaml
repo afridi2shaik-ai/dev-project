@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-management-microservice-dev
+  namespace: dev
+  labels:
+    app: event-management-microservice
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: event-management-microservice
+  template:
+    metadata:
+      labels:
+        app: event-management-microservice
+    spec:
+      containers:
+        - name: event-management-microservice
+          image: 891377297853.dkr.ecr.ap-south-1.amazonaws.com/event-management-microservice-dev:96b9b16-20260408
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: event-management-microservice-env
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+        
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-management-microservice-dev
+  namespace: dev
+  labels:
+    app: event-management-microservice
+spec:
+  selector:
+    app: event-management-microservice
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: event-management-microservice-ingress-dev
+#   annotations:
+#     alb.ingress.kubernetes.io/scheme: internet-facing
+#     alb.ingress.kubernetes.io/target-type: ip
+#     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:891377297853:certificate/d11e340b-a2a3-4ffc-b0e7-c18d5ce64ba7
+#     alb.ingress.kubernetes.io/group.name: ai-alb
+# spec:
+#   ingressClassName: alb
+#   rules:
+#     - host: eventmanagement-dev.in.cloudbuilders.io
+#       http:
+#         paths:
+#         - path: /
+#           pathType: Prefix
+#           backend:  
+#             service:
+#               name: event-management-microservice-dev
+#               port:
+#                 number: 8000
+
+---
+
+# Horizontal Pod Autoscaler targeting the StatefulSet
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: event-management-microservice-dev-hpa
+#   namespace: dev
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: event-management-microservice-dev
+#   minReplicas: 1
+#   maxReplicas: 5
+#   metrics:
+#     - type: Resource
+#       resource:
+#         name: cpu
+#         target:
+#           type: Utilization
+#           averageUtilization: 80
+#     - type: Resource
+#       resource:
+#         name: memory
+#         target:
+#           type: Utilization
+#           averageUtilization: 80      
+#   behavior:
+#     scaleUp:
+#       stabilizationWindowSeconds: 0
+#       policies:
+#         - type: Percent
+#           value: 100
+#           periodSeconds: 60
+#         - type: Pods
+#           value: 4
+#           periodSeconds: 60
+#       selectPolicy: Max
+#     scaleDown:
+#       stabilizationWindowSeconds: 300
+#       policies:
+#         - type: Percent
+#           value: 50
+#           periodSeconds: 60
+#       selectPolicy: Max
