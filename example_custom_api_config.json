@@ -1,0 +1,128 @@
+{
+  "name": "Custom API Assistant",
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "system_prompt_template": "You are a helpful AI assistant with access to external APIs. When users ask for information that requires external data, use the call_custom_api tool to fetch it. Always provide engaging responses while API calls are in progress."
+  },
+  "tools": {
+    "custom_api": {
+      "crm_api": {
+        "enabled": true,
+        "config": {
+          "base_url": "https://api.example.com",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "timeout_seconds": 30.0,
+          "authentication": {
+            "type": "bearer",
+            "token": "your-api-token-here"
+          },
+          "body": {
+            "fields": [
+              {
+                "key": "customer_name",
+                "description": "Name of the customer",
+                "field_type": "string",
+                "required": true,
+                "examples": ["John Doe", "Jane Smith"]
+              },
+              {
+                "key": "phone_number",
+                "description": "Customer phone number",
+                "field_type": "string",
+                "required": true,
+                "examples": ["+1234567890", "+9876543210"]
+              },
+              {
+                "key": "lead_score",
+                "description": "Lead scoring value",
+                "field_type": "integer",
+                "required": false,
+                "examples": ["85", "92"]
+              }
+            ]
+          }
+        }
+      },
+      "logs_api": {
+        "enabled": true,
+        "config": {
+          "base_url": "https://logs.example.com",
+          "method": "GET",
+          "headers": {
+            "Accept": "application/json"
+          },
+          "timeout_seconds": 15.0,
+          "authentication": {
+            "type": "api_key",
+            "api_key": "your-logs-api-key",
+            "header_name": "X-API-Key"
+          },
+          "query": {
+            "fields": [
+              {
+                "key": "assistant_id",
+                "description": "ID of the assistant to get logs for",
+                "field_type": "string",
+                "required": true,
+                "examples": ["bb5c4bee-68c3-4821-8ae4-d497019bfeab"]
+              },
+              {
+                "key": "limit",
+                "description": "Number of logs to retrieve",
+                "field_type": "integer",
+                "required": false,
+                "examples": ["10", "50"]
+              }
+            ]
+          }
+        }
+      },
+      "webhook_api": {
+        "enabled": true,
+        "config": {
+          "base_url": "https://webhook.example.com",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "timeout_seconds": 10.0,
+          "authentication": {
+            "type": "custom",
+            "headers": {
+              "X-Webhook-Secret": "your-webhook-secret"
+            }
+          },
+          "body": {
+            "fields": [
+              {
+                "key": "event_type",
+                "description": "Type of event being sent",
+                "field_type": "string",
+                "required": true,
+                "examples": ["call_ended", "call_started", "user_inquiry"]
+              },
+              {
+                "key": "session_id",
+                "description": "Session ID of the call",
+                "field_type": "string",
+                "required": true,
+                "examples": ["session-123", "call-456"]
+              },
+              {
+                "key": "data",
+                "description": "Additional event data",
+                "field_type": "string",
+                "required": false,
+                "examples": ["Customer satisfied", "Issue resolved"]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,251 @@
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: pipecat-service-sandbox-headless
+  namespace: sandbox
+  labels:
+    app: pipecat-service
+spec:
+  clusterIP: None   # <-- Headless Service
+  selector:
+    app: pipecat-service
+  ports:
+    - name: http
+      port: 7860
+      targetPort: 7860
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pipecat-service-sandbox
+  namespace: sandbox
+  labels:
+    app: pipecat-service
+spec:
+  serviceName: pipecat-service-sandbox-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: pipecat-service
+  template:
+    metadata:
+      labels:
+        app: pipecat-service
+    spec:
+      serviceAccountName: aws-access-s3-role
+      initContainers:
+        - name: fetch-credentials
+          image: amazon/aws-cli:2.15.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Downloading credentials from S3..."
+              aws s3 cp s3://ai-agent-credentials/ai-agent-467302-7d9911964de11.json /credentials/app.json
+              echo "Done."
+          volumeMounts:
+            - name: credentials
+              mountPath: /credentials
+      containers:
+        - name: pipecat-service
+          image: 891377297853.dkr.ecr.us-west-2.amazonaws.com/pipecat-service-sandbox:79f1e91-20260405
+          ports:
+            - containerPort: 7860
+          envFrom:
+            - secretRef:
+                name: pipecat-service-env
+          resources:
+            requests:
+              cpu: "1.5"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          volumeMounts:
+            - name: data-storage
+              mountPath: /app/data
+            - name: credentials
+              mountPath: /app/credentials
+              readOnly: true
+      volumes:
+        - name: credentials
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data-storage
+        labels:
+          app: pipecat-service
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: ebs-sc
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+
+# Keep your regular ClusterIP service for app traffic
+apiVersion: v1
+kind: Service
+metadata:
+  name: pipecat-service-sandbox
+  namespace: sandbox
+  labels:
+    app: pipecat-service
+spec:
+  selector:
+    app: pipecat-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 7860
+      targetPort: 7860
+  type: ClusterIP
+
+---
+
+# # Ingress unchanged
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: pipecat-service-ingress
+#   namespace: sandbox
+#   annotations:
+#     alb.ingress.kubernetes.io/scheme: internet-facing
+#     alb.ingress.kubernetes.io/target-type: ip
+#     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:891377297853:certificate/781d1cab-003d-4a02-8e99-3c6529620e71
+#     alb.ingress.kubernetes.io/group.name: ai-alb
+#     alb.ingress.kubernetes.io/backend-protocol: HTTP
+#     alb.ingress.kubernetes.io/healthcheck-path: /docs
+#     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+#     alb.ingress.kubernetes.io/ssl-redirect: '443'
+#     alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=300
+# spec:
+#   ingressClassName: alb
+#   rules:
+#     - host: va-sandbox.cloudbuilders.io
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: pipecat-service-sandbox
+#                 port:
+#                   number: 7860
+
+
+---
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: pipecat-service-scaler-sandbox
+  namespace: sandbox
+spec:
+  scaleTargetRef:
+    kind: StatefulSet
+    name: pipecat-service-sandbox
+
+  minReplicaCount: 2          # match your current baseline
+  maxReplicaCount: 10         # set based on cluster capacity
+  pollingInterval: 15         # seconds (how often KEDA checks Prometheus)
+  cooldownPeriod: 60          # seconds before scaling down
+
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 30
+            - type: Pods
+              value: 4
+              periodSeconds: 30
+          selectPolicy: Max
+        scaleDown:
+          stabilizationWindowSeconds: 120
+          policies:
+            - type: Percent
+              value: 50
+              periodSeconds: 60
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+          selectPolicy: Min
+
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+        metricName: pipecat_active_calls_total
+        query: sum(vagent_active_calls) or vector(0)
+        threshold: "5"
+        activationThreshold: "1"
+    
+    # 2) CPU trigger (same idea as HPA CPU utilization)
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "85"     # target CPU utilization %
+
+    # 3) Memory trigger
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "85"     # target memory utilization %
+
+# Horizontal Pod Autoscaler targeting the StatefulSet
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: pipecat-service-sandbox-hpa
+#   namespace: sandbox
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: StatefulSet
+#     name: pipecat-service-sandbox
+#   minReplicas: 2
+#   maxReplicas: 10
+#   metrics:
+#     - type: Resource
+#       resource:
+#         name: cpu
+#         target:
+#           type: Utilization
+#           averageUtilization: 70
+#     - type: Resource
+#       resource:
+#         name: memory
+#         target:
+#           type: Utilization
+#           averageUtilization: 75      
+#   behavior:
+#     scaleUp:
+#       stabilizationWindowSeconds: 0
+#       policies:
+#         - type: Percent
+#           value: 100
+#           periodSeconds: 60
+#         - type: Pods
+#           value: 4
+#           periodSeconds: 60
+#       selectPolicy: Max
+#     scaleDown:
+#       stabilizationWindowSeconds: 300
+#       policies:
+#         - type: Percent
+#           value: 50
+#           periodSeconds: 60
+#       selectPolicy: Max

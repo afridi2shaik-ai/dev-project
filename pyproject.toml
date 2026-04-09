@@ -1,0 +1,102 @@
+[project]
+name = "pipe-cat"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "loguru",
+    "Pillow",
+    "aiohttp",
+    "pipecat-ai[aws-nova-sonic,azure,cartesia,deepgram,elevenlabs,google,koala,local-smart-turn-v3,mcp,openai,silero,webrtc,websocket]==0.0.94",
+    "pipecat-ai-small-webrtc-prebuilt",
+    "boto3",
+    "aiofiles",
+    "pydantic-settings",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-instrumentation-fastapi>=0.46b0",
+    "opentelemetry-exporter-otlp>=1.25.0",
+    "plivo",
+    "twilio",
+    "jinja2",
+    "langchain_community",
+    #only for dev
+    "pyngrok",
+    # Force modern versions compatible with Python 3.12 to avoid old llvmlite build
+    "numba>=0.60",
+    "llvmlite>=0.43",
+    "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
+    "pyjwt>=2.10.1",
+    "motor>=3.7.1",
+    "phonenumbers==9.0.13",
+    "slowapi>=0.1.9",
+    "pipecat-ai-flows>=0.0.20",
+    "langdetect>=1.0.9",
+    "ruff",
+   #"krisp-audio",
+    "prometheus-client==0.20.0",
+]
+
+[project.scripts]
+prod = "app.main:run_server"
+dev = "app.main:run_dev_server"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[tool.ruff]
+line-length = 400  # Keep long lines for audio processing chains
+target-version = "py312"
+
+[tool.ruff.lint]
+# Minimal, high-signal ruleset for real-time Voice AI services.
+# Goal: catch real bugs/security/async issues; avoid style-only noise.
+select = [
+    # Correctness (high-signal, low-noise)
+    "E",      # pycodestyle errors (syntax/indentation)
+    "F",      # Pyflakes (undefined names, unused imports, redefinitions)
+
+    # Async correctness (critical for WebSocket/audio)
+    "ASYNC",  # async/await correctness
+
+    # Security (targeted, high-signal)
+    "S102",   # exec
+    "S301",   # pickle
+    "S501",   # requests without timeout (hang risk)
+    "S506",   # unsafe YAML load
+]
+
+# FOCUSED ignores - only what's essential for voice AI applications
+ignore = [
+    # Real-time processing (latency critical)
+    "E501",    # Line too long (audio processing chains can be long)
+]
+
+# Allow fix for all enabled rules  
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+# FOCUSED per-file ignores - only essential exceptions for voice AI
+
+# Webhook templates (blocking file reads for XML templates)
+"**/api/plivo/webhooks.py" = ["ASYNC230"]  # Template file reading
+"**/api/twilio/webhooks.py" = ["ASYNC230"]  # Template file reading
+"**/api/v2/plivo/webhooks.py" = ["ASYNC230"]  # Template file reading
+"**/api/v2/twilio/webhooks.py" = ["ASYNC230"]  # Template file reading
+
+[tool.uv.sources]
+#krisp-audio = { path = "Krisp/krisp-audio-sdk-python-1.4.0/dist/krisp_audio-1.4.0-cp313-cp313-win_amd64.whl" }
+#krisp-audio = {path="Krisp/krisp-audio-sdk-python-1.4.0/dist/krisp_audio-1.4.0-cp312-cp312-linux_x86_64.whl"}

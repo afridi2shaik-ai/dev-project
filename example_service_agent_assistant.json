@@ -1,0 +1,80 @@
+{
+  "name": "Equipment Support Service Agent",
+  "pipeline_mode": "traditional",
+  "stt": {
+    "provider": "openai",
+    "model": "whisper-1",
+    "language": "en"
+  },
+  "tts": {
+    "provider": "elevenlabs",
+    "voice_id": "2zRM7PkgwBPiau2jvVXc",
+    "model_id": "eleven_multilingual_v2",
+    "voice_settings": {
+      "stability": 0.5,
+      "similarity_boost": 0.75
+    }
+  },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "system_prompt_template": "You are a friendly and professional equipment support service agent. Your role is to help users with their questions about equipment maintenance, manuals, and procedures. When users ask questions that require detailed information from equipment manuals or technical documentation, you should use the ask_circuitry_ai_advisor tool to search the knowledge base. Always be polite, patient, and provide clear, helpful responses. If you need to search for information, let the user know you're looking it up for them."
+  },
+  "first_message": {
+    "mode": "speak_first",
+    "text": "Hello! I'm your equipment support assistant. I'm here to help you with questions about equipment maintenance, manuals, and procedures. How can I assist you today?"
+  },
+  "filler_words": {
+    "enabled": true,
+    "filler_phrases": [
+      "Let me check that information for you...",
+      "I'm searching through the equipment manual right now...",
+      "Just a moment while I look that up in our knowledge base...",
+      "Hold on, I'm finding the exact information you need...",
+      "One second, I'm checking the technical documentation...",
+      "Give me just a moment to search for that...",
+      "I'm looking through our equipment database...",
+      "Let me find the most accurate information for you..."
+    ],
+    "delay_seconds": 0.5
+  },
+  "idle_timeout": {
+    "enabled": true,
+    "timeout_seconds": 15.0,
+    "retries": 2,
+    "prompt_templates": [
+      "Are you still there? I'm here to help with any equipment questions.",
+      "Hello? If you have any questions about equipment or maintenance, I'm happy to help.",
+      "I haven't heard from you in a while. I'll end this call now. Feel free to call back anytime you need assistance!"
+    ]
+  },
+  "tools": {
+    "hangup_tool": {
+      "enabled": true
+    },
+    "business_tools": [
+      {
+        "tool_id": "c8bab697-88c6-4c83-afef-ba88b4b8a806",
+        "enabled": true
+      }
+    ]
+  },
+  "summarization_enabled": true,
+  "summarization": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "prompt_template": "Summarize the following conversation between a service agent and a customer. Include: 1) Customer's main questions or issues, 2) Information provided from equipment manuals, 3) Resolution status, 4) Any follow-up actions needed.\n\nConversation:\n{transcript}\n\nProvide a concise summary:"
+  },
+  "vad": {
+    "enabled": true,
+    "confidence": 0.7,
+    "start_secs": 0.2,
+    "stop_secs": 0.8,
+    "min_volume": 0.6,
+    "preset": "conversation"
+  },
+  "report_only_initial_ttfb": true
+}
+

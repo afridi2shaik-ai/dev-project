@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Voice Agent</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
+
+        :root {
+            --bg: #0f0f12;
+            --surface: #18181c;
+            --surface-raised: #222228;
+            --border: #2d2d35;
+            --text: #e4e4e7;
+            --text-muted: #71717a;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --success: #22c55e;
+            --success-bg: rgba(34, 197, 94, 0.12);
+            --warning: #eab308;
+            --warning-bg: rgba(234, 179, 8, 0.12);
+            --error: #ef4444;
+            --error-bg: rgba(239, 68, 68, 0.12);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        .main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .sidebar-right {
+            width: 280px;
+            flex-shrink: 0;
+            background: linear-gradient(145deg, var(--surface) 0%, var(--surface-raised) 100%);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .sidebar-right .sidebar-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+        }
+
+        .hero {
+            background: linear-gradient(145deg, var(--surface) 0%, var(--surface-raised) 100%);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero h1 {
+            margin: 0 0 8px 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .hero .subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 24px;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        #status {
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: 10px 18px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.25s, color 0.25s;
+        }
+
+        #status::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        #status.disconnected {
+            background: var(--error-bg);
+            color: var(--error);
+        }
+        #status.disconnected::before { animation: none; }
+
+        #status.connecting {
+            background: var(--warning-bg);
+            color: var(--warning);
+        }
+        #status.connecting::before {
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+
+        #status.connected {
+            background: var(--success-bg);
+            color: var(--success);
+        }
+        #status.connected::before {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 8px;
+        }
+
+        button {
+            font-family: inherit;
+            padding: 14px 28px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            border-radius: var(--radius-sm);
+            transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
+        }
+
+        button#connect-btn.connect {
+            background: var(--success);
+            color: #fff;
+        }
+        button#connect-btn.connect:hover {
+            background: #16a34a;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+        }
+
+        button#connect-btn.disconnect {
+            background: var(--error);
+            color: #fff;
+        }
+        button#connect-btn.disconnect:hover {
+            background: #dc2626;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .chat-container {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 280px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            background: var(--surface);
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-container::-webkit-scrollbar-track {
+            background: var(--surface-raised);
+            border-radius: 3px;
+        }
+        .chat-container::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        .chat-container h3 {
+            margin: 0 0 12px 0;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        #chat-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chat-message {
+            margin: 0;
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        /* Assistant: left side, plain text on light background */
+        .chat-message.assistant {
+            align-self: flex-start;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* User: right side, dark bubble with white text */
+        .chat-message.user {
+            align-self: flex-end;
+            background: #1f2937;
+            color: #fff;
+            border: none;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-empty {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            padding: 8px 0;
+        }
+
+        .config-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .config-container label {
+            display: block;
+            margin-top: 16px;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: var(--text);
+        }
+
+        .config-container label:first-child { margin-top: 0; }
+
+        .config-container input[type="text"],
+        .config-container textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-family: inherit;
+            background: var(--bg);
+            color: var(--text);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .config-container input:focus,
+        .config-container textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
+        .config-container textarea {
+            min-height: 200px;
+            font-family: 'ui-monospace', 'SF Mono', 'Consolas', monospace;
+            resize: vertical;
+        }
+
+        .config-container textarea.override-textarea {
+            min-height: 140px;
+        }
+
+        .config-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .sidebar-right .option-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .sidebar-right .option-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+            margin-top: 2px;
+            accent-color: var(--accent);
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        .sidebar-right .option-item .option-label {
+            font-size: 0.875rem;
+            color: var(--text);
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 720px) {
+            .page { flex-direction: column; }
+            .sidebar-right { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="main">
+            <div class="hero">
+                <h1>WebRTC Voice Agent</h1>
+                <p class="subtitle">Connect and talk with your AI assistant over voice or text.</p>
+                <div class="status-row">
+                    <p id="status" class="disconnected">Disconnected</p>
+                </div>
+                <div class="button-group">
+                    <button id="connect-btn" class="connect">Connect</button>
+                </div>
+                <audio id="audio-el" autoplay></audio>
+
+                <div class="chat-container" id="chat-container" style="display: none;">
+                    <h3>Chat</h3>
+                    <div id="chat-messages" class="chat-empty">Bot replies will appear here when you use text-reply mode.</div>
+                </div>
+            </div>
+
+            <div class="config-container">
+            <label for="access-token">Auth0 Access Token (JWT)</label>
+            <input type="text" id="access-token" value="<PASTE YOUR ACCESS TOKEN HERE>" placeholder="Paste your access token">
+            <label for="id-token">Auth0 ID Token (Optional)</label>
+            <input type="text" id="id-token" value="<PASTE YOUR ID TOKEN HERE>" placeholder="Paste your ID token">
+
+            <div class="config-section">
+                <label for="assistant-id">Assistant ID</label>
+                <input type="text" id="assistant-id" value="default" placeholder="default">
+            </div>
+
+            <div id="normal-overrides-section">
+                <label for="assistant-overrides-normal">Assistant overrides — normal WebRTC</label>
+                <textarea id="assistant-overrides-normal" class="override-textarea" placeholder="JSON overrides when text-reply mode is off">
+{
+  "stt": {
+    "provider": "openai",
+    "model": "whisper-1"
+  },
+  "tts": {
+    "provider": "sarvam",
+    "voice_id": "vidya"
+  },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "system_prompt_template": "You are a friendly AI assistant. Respond naturally and keep your answers conversational."
+  },
+  "customer_details": {
+    "name": "John Doe",
+    "history": "This is a new conversation with the user."
+  },
+  "extra_overrides": null
+}
+                </textarea>
+            </div>
+
+            <div id="voice-to-chat-overrides-section" style="display: none;">
+                <label for="assistant-overrides-voice-to-chat">Assistant overrides — text-reply mode</label>
+                <textarea id="assistant-overrides-voice-to-chat" class="override-textarea" placeholder="JSON overrides when text-reply mode is on">
+{
+  "pipeline_mode": "audio_chat",
+  "stt": { "provider": "openai", "model": "whisper-1" },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "system_prompt_template": "You are a friendly AI assistant. Respond in short text (voice-to-chat mode)."
+  }
+}
+                </textarea>
+            </div>
+            </div>
+        </div>
+
+        <aside class="sidebar-right">
+            <div class="sidebar-title">Options</div>
+            <label class="option-item" for="use-voice-to-chat-api">
+                <input type="checkbox" id="use-voice-to-chat-api">
+                <span class="option-label">Voice to chat (text replies only; no bot voice)</span>
+            </label>
+        </aside>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById("status")
+        const buttonEl = document.getElementById("connect-btn")
+        const audioEl = document.getElementById("audio-el")
+        const accessTokenEl = document.getElementById("access-token")
+        const idTokenEl = document.getElementById("id-token")
+        const assistantIdEl = document.getElementById("assistant-id")
+        const assistantOverridesNormalEl = document.getElementById("assistant-overrides-normal")
+        const assistantOverridesVoiceToChatEl = document.getElementById("assistant-overrides-voice-to-chat")
+
+        let connected = false
+        let peerConnection = null
+
+        const waitForIceGatheringComplete = async (pc, timeoutMs = 2000) => {
+            if (pc.iceGatheringState === 'complete') return;
+            return new Promise((resolve) => {
+                let timeoutId;
+                const checkState = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        cleanup();
+                        resolve();
+                    }
+                };
+                const onTimeout = () => {
+                    cleanup();
+                    resolve();
+                };
+                const cleanup = () => {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    clearTimeout(timeoutId);
+                };
+                pc.addEventListener('icegatheringstatechange', checkState);
+                timeoutId = setTimeout(onTimeout, timeoutMs);
+                checkState();
+            });
+        };
+
+        const createSession = async (accessToken, idToken, assistantId, assistantOverrides, useVoiceToChatApi) => {
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+            };
+            if (idToken) {
+                headers['x-id-token'] = idToken;
+            }
+            const url = useVoiceToChatApi ? '/vagent/api/voice-to-chat' : '/vagent/api/sessions';
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({
+                    assistant_id: assistantId,
+                    assistant_overrides: assistantOverrides
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                alert(`Failed to create session: ${error.detail}`);
+                return null;
+            }
+
+            const session = await response.json();
+            return session;
+        };
+
+        const setupDataChannelForChat = (channel) => {
+            if (!channel) return;
+            channel.onmessage = (e) => {
+                try {
+                    const raw = typeof e.data === "string" ? e.data : String(e.data);
+                    let role = "assistant";
+                    let data = raw;
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed.text === "string") {
+                            data = parsed.text;
+                            if (parsed.role === "user" || parsed.role === "assistant") role = parsed.role;
+                        }
+                    } catch (_) {}
+                    if (data) appendChatMessage(role, data);
+                } catch (err) {
+                    console.warn("Chat message parse error", err);
+                }
+            };
+        };
+
+        const createSmallWebRTCConnection = async (sessionId, audioTrack, useVoiceToChat) => {
+            const config = {
+    iceServers: [
+    { urls: "stun:stun.l.google.com:19302" }, // fallback STUN server
+    { urls: "stun:k8s-stunners-stunnerg-6402808462-aa9084fcc7d1c2be.elb.ap-south-1.amazonaws.com:3478" },
+    {
+        urls: [
+        "turn:k8s-stunners-stunnerg-6402808462-aa9084fcc7d1c2be.elb.ap-south-1.amazonaws.com:3478?transport=udp",
+        "turns:k8s-stunners-stunnerg-6402808462-aa9084fcc7d1c2be.elb.ap-south-1.amazonaws.com:5349?transport=tcp"
+        ],
+        username: "stunneruser",
+        credential: "stunnerpassword"
+    }
+    ]
+};
+            const pc = new RTCPeerConnection(config)
+            // Always create data channel for live transcript (both normal WebRTC and voice-to-chat)
+            const dataChannel = pc.createDataChannel("pipecat");
+            setupDataChannelForChat(dataChannel);
+            addPeerConnectionEventListeners(pc)
+            pc.ontrack = e => audioEl.srcObject = e.streams[0]
+            pc.addTransceiver(audioTrack, { direction: 'sendrecv' })
+            pc.addTransceiver('video', { direction: 'sendrecv' })
+            await pc.setLocalDescription(await pc.createOffer())
+            await waitForIceGatheringComplete(pc)
+            const offer = pc.localDescription
+
+            const accessToken = accessTokenEl.value;
+            const idToken = idTokenEl.value;
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+            };
+            if (idToken) {
+                headers['x-id-token'] = idToken;
+            }
+
+            const response = await fetch('/vagent/api/offer', {
+                body: JSON.stringify({
+                    sdp: offer.sdp,
+                    type: offer.type,
+                    session_id: sessionId
+                }),
+                headers: headers,
+                method: 'POST',
+            });
+
+            if (!response.ok) {
+                alert("Failed to connect. Check the console for details.");
+                return null;
+            }
+
+            const answer = await response.json()
+            await pc.setRemoteDescription(answer)
+            return pc
+        }
+
+        const connect = async () => {
+            _onConnecting()
+
+            const useVoiceToChatApi = document.getElementById("use-voice-to-chat-api").checked;
+            const overridesEl = useVoiceToChatApi ? assistantOverridesVoiceToChatEl : assistantOverridesNormalEl;
+            let assistantOverrides = null;
+            try {
+                assistantOverrides = JSON.parse(overridesEl.value.trim());
+            } catch (e) {
+                alert("Invalid JSON in Assistant Overrides (" + (useVoiceToChatApi ? "text-reply mode" : "normal") + "). Please correct it.");
+                _onDisconnected();
+                return;
+            }
+
+            const session = await createSession(
+                accessTokenEl.value,
+                idTokenEl.value,
+                assistantIdEl.value,
+                assistantOverrides,
+                useVoiceToChatApi
+            );
+
+            if (!session) {
+                _onDisconnected();
+                return;
+            }
+
+            const audioStream = await navigator.mediaDevices.getUserMedia({audio: true})
+            peerConnection = await createSmallWebRTCConnection(session.session_id, audioStream.getAudioTracks()[0], useVoiceToChatApi)
+            if (!peerConnection) {
+                _onDisconnected();
+            }
+        }
+
+        const chatMessagesEl = document.getElementById("chat-messages");
+        const chatContainerEl = document.getElementById("chat-container");
+        const useVoiceToChatCheckbox = document.getElementById("use-voice-to-chat-api");
+
+        const voiceToChatOverridesSection = document.getElementById("voice-to-chat-overrides-section");
+        const normalOverridesSection = document.getElementById("normal-overrides-section");
+
+        const updateChatContainerVisibility = () => {
+            const enabled = useVoiceToChatCheckbox && useVoiceToChatCheckbox.checked;
+            // Always show transcript area so live transcript works for both normal WebRTC and voice-to-chat
+            if (chatContainerEl) {
+                chatContainerEl.style.display = "block";
+            }
+            if (voiceToChatOverridesSection) {
+                voiceToChatOverridesSection.style.display = enabled ? "block" : "none";
+            }
+            if (normalOverridesSection) {
+                normalOverridesSection.style.display = enabled ? "none" : "block";
+            }
+        };
+        if (useVoiceToChatCheckbox) {
+            useVoiceToChatCheckbox.addEventListener("change", updateChatContainerVisibility);
+        }
+        updateChatContainerVisibility();
+
+        const appendChatMessage = (role, text) => {
+            if (!text || !chatMessagesEl) return;
+            if (chatMessagesEl.classList.contains("chat-empty")) {
+                chatMessagesEl.classList.remove("chat-empty");
+                chatMessagesEl.innerHTML = "";
+            }
+            const div = document.createElement("div");
+            div.className = "chat-message " + role;
+            div.textContent = text;
+            chatMessagesEl.appendChild(div);
+            chatMessagesEl.parentElement.scrollTop = chatMessagesEl.parentElement.scrollHeight;
+        };
+
+        const addPeerConnectionEventListeners = (pc) => {
+            pc.oniceconnectionstatechange = () => {}
+            pc.onconnectionstatechange = () => {
+                let connectionState = pc?.connectionState
+                if (connectionState === 'connected') {
+                    _onConnected()
+                } else if (connectionState === 'disconnected' || connectionState === 'failed' || connectionState === 'closed') {
+                    _onDisconnected()
+                }
+            }
+            pc.onicecandidate = (event) => {};
+            pc.ondatachannel = (event) => {
+                setupDataChannelForChat(event.channel);
+            };
+        }
+
+        const _onConnecting = () => {
+            statusEl.textContent = "Connecting"
+            statusEl.className = "connecting";
+            buttonEl.textContent = "Disconnect"
+            buttonEl.className = "disconnect";
+            connected = true
+        }
+
+        const _onConnected = () => {
+            statusEl.textContent = "Connected"
+            statusEl.className = "connected";
+            buttonEl.textContent = "Disconnect"
+            buttonEl.className = "disconnect";
+            connected = true
+        }
+
+        const _onDisconnected = () => {
+            statusEl.textContent = "Disconnected"
+            statusEl.className = "disconnected";
+            buttonEl.textContent = "Connect"
+            buttonEl.className = "connect";
+            connected = false
+            if (chatMessagesEl) {
+                chatMessagesEl.innerHTML = "Bot replies will appear here when you use text-reply mode.";
+                chatMessagesEl.classList.add("chat-empty");
+            }
+        }
+
+        const disconnect = () => {
+            if (!peerConnection) {
+                return
+            }
+            peerConnection.close()
+            peerConnection = null
+            _onDisconnected()
+        }
+
+        buttonEl.addEventListener("click", async () => {
+            if (!connected) {
+                await connect()
+            } else {
+                disconnect()
+            }
+        });
+    </script>
+</body>
+</html>
+

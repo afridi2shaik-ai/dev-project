@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="{{WSS_URL}}">
+      <Parameter name="session_id" value="{{SESSION_ID}}"/>
+      <Parameter name="tenant_id" value="{{TENANT_ID}}"/>
+    </Stream>
+  </Connect>
+  <Pause length="40"/>
+</Response>
