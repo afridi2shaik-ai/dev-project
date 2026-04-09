@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-management-microservice-sandbox
+  namespace: sandbox
+  labels:
+    app: event-management-microservice
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: event-management-microservice
+  template:
+    metadata:
+      labels:
+        app: event-management-microservice
+    spec:
+      containers:
+        - name: event-management-microservice
+          image: 891377297853.dkr.ecr.us-west-2.amazonaws.com/event-management-microservice-sandbox:717fdde-20260408
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: event-management-microservice-env
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-management-microservice-sandbox
+  namespace: sandbox
+  labels:
+    app: event-management-microservice
+spec:
+  selector:
+    app: event-management-microservice
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---

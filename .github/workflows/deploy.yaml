@@ -1,0 +1,304 @@
+name: Build and Deploy to EKS
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+      - sandbox-us
+    types:
+      - closed
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # 1. Build and Push Docker Image to ECR
+  # ──────────────────────────────────────────────────────────────
+  build-and-push-ecr:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: write
+
+    # Inline conditional secrets based on target branch (github.base_ref)
+    env:
+      AWS_REGION: ${{ 
+        github.base_ref == 'dev' && secrets.REGION || 
+        github.base_ref == 'main' && secrets.REGION || 
+        secrets.REGION_US 
+       }}
+      AWS_ACCOUNT_ID: ${{ 
+        github.base_ref == 'dev' && secrets.AWS_ACCOUNT_ID || 
+        github.base_ref == 'main' && secrets.AWS_ACCOUNT_ID || 
+        secrets.AWS_ACCOUNT_ID_US 
+       }}
+      AWS_ROLE: ${{ 
+        github.base_ref == 'dev' && secrets.AWS_ROLE || 
+        github.base_ref == 'main' && secrets.AWS_ROLE || 
+        secrets.AWS_ROLE_US 
+       }}
+
+    outputs:
+      image_tag: ${{ steps.set-image-tag.outputs.image_tag }}
+      namespace: ${{ steps.set-outputs.outputs.namespace }}
+      ecr_repo: ${{ steps.set-outputs.outputs.ecr_repo }}
+      manifest_path: ${{ steps.set-outputs.outputs.manifest_path }}
+      secret_id: ${{ steps.set-outputs.outputs.secret_id }}
+      clustername: ${{ steps.set-outputs.outputs.clustername }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set Dynamic Outputs Based on Branch
+        id: set-outputs
+        run: |
+          if [[ "${{ github.base_ref }}" == "dev" ]]; then
+            echo "namespace=dev" >> $GITHUB_OUTPUT
+            echo "ecr_repo=event-management-microservice-dev" >> $GITHUB_OUTPUT
+            echo "manifest_path=manifestfiles/dev" >> $GITHUB_OUTPUT
+            echo "secret_id=event-management-microservice_dev-secrets" >> $GITHUB_OUTPUT
+            echo "clustername=AI-Voice-India-cluster" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.base_ref }}" == "main" ]]; then
+            echo "namespace=prod" >> $GITHUB_OUTPUT
+            echo "ecr_repo=event-management-microservice-prod" >> $GITHUB_OUTPUT
+            echo "manifest_path=manifestfiles/prod" >> $GITHUB_OUTPUT
+            echo "secret_id=event-management-microservice_prod-secrets" >> $GITHUB_OUTPUT
+            echo "clustername=AI-Voice-India-cluster" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.base_ref }}" == "sandbox-us" ]]; then
+            echo "namespace=sandbox" >> $GITHUB_OUTPUT
+            echo "ecr_repo=event-management-microservice-sandbox" >> $GITHUB_OUTPUT
+            echo "manifest_path=manifestfiles/sandbox" >> $GITHUB_OUTPUT
+            echo "secret_id=event-management-microservice_sandbox-secrets" >> $GITHUB_OUTPUT
+            echo "clustername=AI-Voice-Agent-US-cluster" >> $GITHUB_OUTPUT
+          else
+            echo "Unexpected branch: ${{ github.base_ref }}" >&2
+            exit 1
+          fi
+
+      - name: DEBUG - Confirm AWS & Output Values
+        run: |
+          echo "AWS_REGION = '$AWS_REGION'"
+          echo "AWS_ACCOUNT_ID = '$AWS_ACCOUNT_ID'"
+          echo "AWS_ROLE = '$AWS_ROLE'"
+          echo "Namespace = '${{ steps.set-outputs.outputs.namespace }}'"
+          echo "ECR Repo = '${{ steps.set-outputs.outputs.ecr_repo }}'"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          audience: sts.amazonaws.com
+          role-duration-seconds: 3600
+          role-session-name: GithubActions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set Image Tag (Commit SHA + Date)
+        id: set-image-tag
+        run: |
+          COMMIT_SHA=${GITHUB_SHA::7}
+          DATE=$(date +'%Y%m%d')
+          IMAGE_TAG="${COMMIT_SHA}-${DATE}"
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Pushing to: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ steps.set-outputs.outputs.ecr_repo }}:${IMAGE_TAG}"
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | \
+          docker login --username AWS --password-stdin \
+          ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+      - name: Build Docker image
+        run: |
+          docker build -t event-management-microservice:${{ steps.set-image-tag.outputs.image_tag }} .
+
+      - name: Run Trivy Scan (Docker Mode)
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.69.3 \
+            image \
+            --severity CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            event-management-microservice:${{ steps.set-image-tag.outputs.image_tag }}
+
+      - name: Tag Docker image for ECR
+        run: |
+          docker tag event-management-microservice:${{ steps.set-image-tag.outputs.image_tag }} \
+            ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ steps.set-outputs.outputs.ecr_repo }}:${{ steps.set-image-tag.outputs.image_tag }}
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ steps.set-outputs.outputs.ecr_repo }}:${{ steps.set-image-tag.outputs.image_tag }}
+
+  # ──────────────────────────────────────────────────────────────
+  # 2. Deploy Secrets to EKS
+  # ──────────────────────────────────────────────────────────────
+  deploy-secrets:
+    needs: build-and-push-ecr
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: write
+
+    # Re-use same inline AWS env logic
+    env:
+      AWS_REGION: ${{ 
+        github.base_ref == 'dev' && secrets.REGION || 
+        github.base_ref == 'main' && secrets.REGION || 
+        secrets.REGION_US 
+       }}
+      AWS_ACCOUNT_ID: ${{ 
+        github.base_ref == 'dev' && secrets.AWS_ACCOUNT_ID || 
+        github.base_ref == 'main' && secrets.AWS_ACCOUNT_ID || 
+        secrets.AWS_ACCOUNT_ID_US 
+       }}
+      AWS_ROLE: ${{ 
+        github.base_ref == 'dev' && secrets.AWS_ROLE || 
+        github.base_ref == 'main' && secrets.AWS_ROLE || 
+        secrets.AWS_ROLE_US 
+       }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: DEBUG - Confirm Values in Deploy Job
+        run: |
+          echo "AWS_REGION = '$AWS_REGION'"
+          echo "AWS_ACCOUNT_ID = '$AWS_ACCOUNT_ID'"
+          echo "AWS_ROLE = '$AWS_ROLE'"
+          echo "Namespace = '${{ needs.build-and-push-ecr.outputs.namespace }}'"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          audience: sts.amazonaws.com
+          role-duration-seconds: 3600
+          role-session-name: GithubActions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          kubectl version --client
+
+
+      - name: Set up KUBECONFIG for EKS
+        run: |
+          aws eks update-kubeconfig --name ${{ needs.build-and-push-ecr.outputs.clustername }} --region $AWS_REGION
+
+      - name: Check EKS access
+        run: |
+          echo "=== Cluster Nodes ==="
+          kubectl get nodes
+          echo "=== Pods in all namespaces ==="
+          kubectl get pods -A
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl get namespace ${{ needs.build-and-push-ecr.outputs.namespace }} || \
+          kubectl create namespace ${{ needs.build-and-push-ecr.outputs.namespace }}
+
+      - name: Fetch Secrets from AWS Secrets Manager
+        run: |
+          aws secretsmanager get-secret-value \
+            --secret-id ${{ needs.build-and-push-ecr.outputs.secret_id }} \
+            --query SecretString --output text > secrets.json
+          jq -r 'to_entries | map("\(.key)=\(.value|tostring)") | .[]' secrets.json > .env
+          echo "Secrets fetched and converted to .env"
+
+      - name: Create Kubernetes Secret from .env
+        run: |
+          kubectl delete secret event-management-microservice-env\
+            --namespace=${{ needs.build-and-push-ecr.outputs.namespace }} || true
+          kubectl create secret generic event-management-microservice-env \
+            --namespace=${{ needs.build-and-push-ecr.outputs.namespace }} \
+            --from-env-file=.env \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+  # ──────────────────────────────────────────────────────────────
+  # 3. Update the manifest files with new image tag
+  # ──────────────────────────────────────────────────────────────
+
+  update-manifests:
+    needs: [build-and-push-ecr, deploy-secrets]
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: write
+
+    env:
+      AWS_REGION: ${{ 
+        github.base_ref == 'dev' && secrets.REGION || 
+        github.base_ref == 'main' && secrets.REGION || 
+        secrets.REGION_US 
+       }}
+      AWS_ACCOUNT_ID: ${{ 
+        github.base_ref == 'dev' && secrets.AWS_ACCOUNT_ID || 
+        github.base_ref == 'main' && secrets.AWS_ACCOUNT_ID || 
+        secrets.AWS_ACCOUNT_ID_US 
+       }}
+      AWS_ROLE: ${{ 
+        github.base_ref == 'dev' && secrets.AWS_ROLE || 
+        github.base_ref == 'main' && secrets.AWS_ROLE || 
+        secrets.AWS_ROLE_US 
+       }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Ensure we can push back to the same branch
+          ref: ${{ github.base_ref }}
+          persist-credentials: true
+    
+      - name: Update image tag in manifests
+        run: |
+          IMAGE_TAG="${{ needs.build-and-push-ecr.outputs.image_tag }}"
+          MANIFEST_PATH="${{ needs.build-and-push-ecr.outputs.manifest_path }}"
+          
+          if [[ "${{ github.base_ref }}" == "dev" ]]; then
+            REPO="891377297853.dkr.ecr.ap-south-1.amazonaws.com/event-management-microservice-dev"
+          elif [[ "${{ github.base_ref }}" == "sandbox-us" ]]; then
+            REPO="891377297853.dkr.ecr.us-west-2.amazonaws.com/event-management-microservice-sandbox"
+          elif [[ "${{ github.base_ref }}" == "main" ]]; then
+            REPO="891377297853.dkr.ecr.ap-south-1.amazonaws.com/event-management-microservice-prod"
+          else
+            echo "Unknown branch: ${{ github.base_ref }}"
+            exit 1
+          fi
+
+          FULL_IMAGE="${REPO}:${IMAGE_TAG}"
+
+          echo "Updating manifests in ${MANIFEST_PATH} with image: ${FULL_IMAGE}"
+          
+          sed -i -E "s|(image: ${REPO}):[^ ]*|\1:${IMAGE_TAG}|g" ${MANIFEST_PATH}/*.yaml
+
+          echo "Updated image lines:"
+          grep "image:" ${MANIFEST_PATH}/*.yaml || true
+
+          echo "=== Full new image used ==="
+          echo "${FULL_IMAGE}"
+    
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+      - name: Commit and push manifest changes
+        run: |
+          # Only commit if there are changes
+          if git status --porcelain | grep .; then
+            git add ${{ needs.build-and-push-ecr.outputs.manifest_path }}
+            git commit -m "chore: update image tag to ${{ needs.build-and-push-ecr.outputs.image_tag }} for ${{ github.base_ref }}"
+            git push origin ${{ github.base_ref }}
+          else
+            echo "No manifest changes to commit."
+          fi
