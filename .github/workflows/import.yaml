@@ -35,6 +35,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Validate secrets
+        env:
+          SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+          TARGET_REPO_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+        run: |
+          test -n "$SOURCE_REPO_TOKEN" || (echo "SOURCE_REPO_TOKEN is missing" && exit 1)
+          test -n "$TARGET_REPO_TOKEN" || (echo "TARGET_REPO_TOKEN is missing" && exit 1)
+
+      - name: Debug source access
+        env:
+          SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+        run: |
+          test -n "$SOURCE_REPO_TOKEN" || (echo "SOURCE_REPO_TOKEN is empty" && exit 1)
+          git ls-remote https://x-access-token:${SOURCE_REPO_TOKEN}@github.com/CloudBuildersOrg/Event-Management-Service.git
+
       - name: Add source remote
         env:
           SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
