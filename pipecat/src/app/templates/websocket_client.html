@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Audio Client</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .config-item { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input, textarea { width: 100%; max-width: 500px; padding: 8px; box-sizing: border-box; }
+        textarea { height: 150px; font-family: monospace; }
+        button { padding: 10px 15px; font-size: 16px; }
+        #status { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Voice Agent Test</h1>
+
+    <div class="config-item">
+        <label for="access-token">Auth0 Access Token (JWT)</label>
+        <input type="text" id="access-token" value="<PASTE YOUR ACCESS TOKEN HERE>">
+    </div>
+    <div class="config-item">
+        <label for="id-token">Auth0 ID Token (Optional)</label>
+        <input type="text" id="id-token" value="<PASTE YOUR ID TOKEN HERE>">
+    </div>
+    <div class="config-item">
+        <label for="assistant-id">Assistant ID</label>
+        <input type="text" id="assistant-id" value="default">
+    </div>
+    <div class="config-item">
+        <label for="assistant-overrides">Assistant Overrides (JSON)</label>
+        <textarea id="assistant-overrides">{}</textarea>
+    </div>
+
+    <button id="startButton">Start Call</button>
+    <button id="stopButton" disabled>Stop Call</button>
+    <p>Status: <span id="status">Idle</span></p>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const statusDiv = document.getElementById('status');
+        const accessTokenEl = document.getElementById("access-token");
+        const idTokenEl = document.getElementById("id-token");
+        const assistantIdEl = document.getElementById("assistant-id");
+        const assistantOverridesEl = document.getElementById("assistant-overrides");
+
+        let socket;
+        let mediaRecorder;
+        let audioContext;
+        let audioQueue = [];
+        let isPlaying = false;
+
+        const createSession = async () => {
+            let assistantOverrides;
+            try {
+                assistantOverrides = JSON.parse(assistantOverridesEl.value.trim());
+            } catch (e) {
+                alert("Invalid JSON in Assistant Overrides.");
+                return null;
+            }
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessTokenEl.value}`
+            };
+            if (idTokenEl.value && idTokenEl.value !== "<PASTE YOUR ID TOKEN HERE>") {
+                headers['x-id-token'] = idTokenEl.value;
+            }
+
+            try {
+                const response = await fetch('/vagent/api/sessions', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        assistant_id: assistantIdEl.value,
+                        assistant_overrides: assistantOverrides
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || "Failed to create session");
+                }
+
+                const session = await response.json();
+                return session;
+            } catch (error) {
+                alert(`Error creating session: ${error.message}`);
+                return null;
+            }
+        };
+
+        startButton.onclick = async () => {
+            statusDiv.textContent = 'Creating session...';
+            const session = await createSession();
+
+            if (!session) {
+                statusDiv.textContent = 'Idle';
+                return;
+            }
+            
+            statusDiv.textContent = 'Connecting WebSocket...';
+            const url = `wss://${window.location.host}/vagent/api/websocket/voice/${session.session_id}?tenant_id=${session.tenant_id}`;
+            socket = new WebSocket(url);
+
+            socket.onopen = () => {
+                statusDiv.textContent = 'Connected';
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                startStreaming();
+            };
+
+            socket.onmessage = (event) => {
+                const audioData = event.data;
+                audioQueue.push(audioData);
+                if (!isPlaying) {
+                    playNextInQueue();
+                }
+            };
+
+            socket.onclose = () => {
+                statusDiv.textContent = 'Disconnected';
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                }
+                 if (audioContext) {
+                    audioContext.close();
+                    audioContext = null;
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                statusDiv.textContent = 'Error';
+            };
+        };
+
+        stopButton.onclick = () => {
+            if (socket) {
+                socket.close();
+            }
+        };
+
+        async function startStreaming() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+                        socket.send(event.data);
+                    }
+                };
+
+                mediaRecorder.start(250); // Send data every 250ms
+            } catch (err) {
+                console.error("Error accessing microphone:", err);
+                statusDiv.textContent = "Microphone access denied.";
+                socket.close();
+            }
+        }
+
+        async function playNextInQueue() {
+            if (audioQueue.length > 0) {
+                isPlaying = true;
+                const audioData = audioQueue.shift();
+
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                try {
+                    const audioBuffer = await audioContext.decodeAudioData(await audioData.arrayBuffer());
+                    const source = audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioContext.destination);
+                    source.onended = playNextInQueue;
+                    source.start(0);
+                } catch (e) {
+                    console.error("Error decoding audio data:", e);
+                    isPlaying = false; // Try next item
+                    playNextInQueue();
+                }
+                
+            } else {
+                isPlaying = false;
+            }
+        }
+    </script>
+</body>
+</html>
+

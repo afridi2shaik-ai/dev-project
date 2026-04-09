@@ -1,0 +1,98 @@
+{
+  "tools": {
+    "custom_api": {
+      "salesforce_api": {
+        "enabled": true,
+        "config": {
+          "base_url": "https://yourinstance.salesforce.com/services/data/v52.0/sobjects/Lead",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "timeout_seconds": 30,
+          "authentication": {
+            "type": "oauth2",
+            "client_id": "your_salesforce_client_id",
+            "client_secret": "your_salesforce_client_secret",
+            "token_url": "https://login.salesforce.com/services/oauth2/token",
+            "scope": "api",
+            "grant_type": "client_credentials",
+            "cache_token": true,
+            "token_expires_buffer": 300
+          },
+          "body": {
+            "fields": [
+              {
+                "key": "FirstName",
+                "description": "Lead's first name",
+                "field_type": "string",
+                "required": true,
+                "examples": ["John", "Jane"]
+              },
+              {
+                "key": "LastName", 
+                "description": "Lead's last name",
+                "field_type": "string",
+                "required": true,
+                "examples": ["Smith", "Doe"]
+              },
+              {
+                "key": "Email",
+                "description": "Lead's email address",
+                "field_type": "string",
+                "required": true,
+                "examples": ["john.smith@example.com"]
+              },
+              {
+                "key": "Company",
+                "description": "Lead's company name",
+                "field_type": "string",
+                "required": true,
+                "examples": ["Acme Corp", "Tech Solutions Inc"]
+              },
+              {
+                "key": "LeadSource",
+                "description": "Source of the lead",
+                "field_type": "string", 
+                "required": false,
+                "examples": ["Web", "Phone", "Referral"]
+              }
+            ]
+          }
+        }
+      },
+      "hubspot_api": {
+        "enabled": true,
+        "config": {
+          "base_url": "https://api.hubapi.com/crm/v3/objects/contacts",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "timeout_seconds": 30,
+          "authentication": {
+            "type": "oauth2",
+            "client_id": "your_hubspot_client_id",
+            "client_secret": "your_hubspot_client_secret", 
+            "token_url": "https://api.hubapi.com/oauth/v1/token",
+            "scope": "crm.objects.contacts.write",
+            "grant_type": "client_credentials",
+            "cache_token": true,
+            "token_expires_buffer": 180
+          },
+          "body": {
+            "fields": [
+              {
+                "key": "properties",
+                "description": "Contact properties object containing contact details",
+                "field_type": "object",
+                "required": true,
+                "examples": [{"firstname": "John", "lastname": "Smith", "email": "john@example.com"}]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "_id": "4d7ba92f-1666-44de-9268-0abf00799e40",
+  "agent_type": "vagent_pipe_cat",
+  "name": "Gaming Chat - Improved Strict VAD",
+  "pipeline_mode": "traditional",
+  "stt": {
+    "provider": "openai",
+    "model": "whisper-1",
+    "language": "en",
+    "prompt": "The following is a conversation with a voice assistant. Please transcribe it accurately. Key terms that may appear include: Pipecat, WebRTC, STT, TTS, LLM, API, session, user, and assistant."
+  },
+  "tts": {
+    "provider": "dynamic",
+    "default_language": "en",
+    "configs": {
+      "en": {
+        "provider": "elevenlabs",
+        "voice_id": "2zRM7PkgwBPiau2jvVXc",
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": {
+          "stability": 0.5,
+          "similarity_boost": 0.75,
+          "style": 0,
+          "use_speaker_boost": true
+        }
+      },
+      "hi": {
+        "provider": "elevenlabs",
+        "voice_id": "2zRM7PkgwBPiau2jvVXc",
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": {
+          "stability": 0.5,
+          "similarity_boost": 0.75,
+          "style": 0,
+          "use_speaker_boost": true
+        }
+      },
+      "te": {
+        "provider": "sarvam",
+        "voice_id": "vidya",
+        "model": "bulbul:v2",
+        "sample_rate": 24000,
+        "params": {
+          "language": "te",
+          "pitch": 0,
+          "pace": 1,
+          "loudness": 1,
+          "enable_preprocessing": false
+        }
+      }
+    }
+  },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0.7,
+    "top_p": null,
+    "max_tokens": null,
+    "presence_penalty": null,
+    "frequency_penalty": null,
+    "system_prompt_template": "You are a gaming chat buddy assistant"
+  },
+  "customer_details": null,
+  "first_message": {
+    "mode": "model_generated",
+    "prompt": "Please introduce yourself to the user and ask how you can help."
+  },
+  "report_only_initial_ttfb": true,
+  "idle_timeout": {
+    "enabled": true,
+    "timeout_seconds": 10,
+    "retries": 2,
+    "prompt_templates": [
+      "Are you still there?",
+      "I'll need to end our conversation if I don't hear from you.",
+      "Goodbye!"
+    ]
+  },
+  "filler_words": {
+    "enabled": true,
+    "filler_phrases": [
+      "Let me check that for you...",
+      "I'll look into that right away...",
+      "Okay, let me think about this...",
+      "Hold on, I'm processing your request...",
+      "One moment please...",
+      "Let me see what I can find...",
+      "I'm working on that now...",
+      "Give me just a second..."
+    ],
+    "delay_seconds": 0.5
+  },
+  "vad": {
+    "enabled": true,
+    "confidence": 0.9,
+    "start_secs": 0.4,
+    "stop_secs": 1.2,
+    "min_volume": 0.8,
+    "preset": null,
+    "auto_adjust_for_turn_detection": true
+  },
+  "summarization_enabled": true,
+  "summarization": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "prompt_template": "You are an intelligent call analysis assistant. Based on the following conversation transcript, please provide a summary and analysis in JSON format.\n\nThe JSON object should have the following structure:\n{\n  \"summary\": \"<A concise summary of the conversation>\",\n  \"outcome\": \"<'Interested' if the user showed clear interest in a product/service or agreed to a follow-up, otherwise 'Not Interested'>\",\n  \"reasoning\": \"<A brief explanation for your outcome classification>\"\n}\n\nHere is the conversation:"
+  },
+  "tools": null,
+  "extra_overrides": null,
+  "created_at": {
+    "$date": "2025-10-01T08:57:02.624Z"
+  },
+  "updated_at": {
+    "$date": "2025-10-01T10:02:29.384Z"
+  },
+  "created_by": {
+    "id": "test_user",
+    "name": "test_user",
+    "email": "test@test.com",
+    "role": null
+  },
+  "updated_by": {
+    "id": "test_user",
+    "name": "test_user",
+    "email": "test@test.com",
+    "role": null
+  }
+}
+

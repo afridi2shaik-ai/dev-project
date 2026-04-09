@@ -1,0 +1,65 @@
+{
+    "name": "ask_circuitry_ai_advisor",
+    "description": "Ask a question to Circuitry AI advisor about equipment maintenance and manuals. The system will initialize a conversation session and then submit your question.",
+    "parameters": [
+      {
+        "name": "user_question",
+        "type": "string",
+        "description": "The user's question about equipment, manuals, or maintenance procedures",
+        "required": true,
+        "examples": [
+          "How do I fill the liquid reservoir for the DS-40i?",
+          "What is the maintenance schedule for the printer?",
+          "what are the claim approval limits?"
+        ]
+      }
+    ],
+    "pre_requests": [
+      {
+        "name": "initialize_session",
+        "description": "Initialize conversation session with Circuitry AI to get sender_id",
+        "endpoint": "/api/v1/start-stream",
+        "method": "POST",
+        "headers": null,
+        "body_template": {
+          "token": "{{auth_token}}",
+          "advisor_id": "3f345493-dcc9-40e5-a6e4-ae2b630a9097"
+        },
+        "query_params": null,
+        "extract_fields": {
+          "sender_id": "sender_id"
+        },
+        "timeout_seconds": 10.0
+      }
+    ],
+    "api_config": {
+      "base_url": "https://dev.dialogue.circuitry.ai",
+      "endpoint": "/api/v1/chat",
+      "method": "POST",
+      "timeout_seconds": 30,
+      "authentication": {
+        "type": "custom_token_db",
+        "credential_id": "4f03d2b0-82f9-4841-b0cc-2bf4ab11a42c"
+      },
+      "query_params": {},
+      "body_template": {
+        "advisor_id": "3f345493-dcc9-40e5-a6e4-ae2b630a9097",
+        "user_message": "{{user_question}}",
+        "sender_id": "{{pre_request.sender_id}}",
+        "token": "{{auth_token}}",
+        "is_stream": false,
+        "deep_think_mode": false,
+        "metadata": {
+          "imagesourceId": "",
+          "imagetype": "",
+          "jwt": "",
+          "mentions": {}
+        }
+      },
+      "success_message": "Here's what I found: {{response}}",
+      "error_message": "I couldn't retrieve the information from the knowledge base right now. Please try again."
+    },
+    "engaging_words": "Let me search the equipment manual for you..."
+  }
+  
+  
