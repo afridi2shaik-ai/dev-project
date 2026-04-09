@@ -1,0 +1,66 @@
+name: Import Event Management code
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: "Source branch to import from"
+        required: true
+        default: "main"
+      target_branch:
+        description: "Target branch to push to"
+        required: true
+        default: "main"
+      prefix:
+        description: "Folder inside target repo"
+        required: true
+        default: "event-management"
+
+permissions:
+  contents: write
+
+jobs:
+  import-subtree:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TARGET_REPO_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add source remote
+        env:
+          SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+        run: |
+          git remote remove event-management 2>/dev/null || true
+          git remote add event-management https://x-access-token:${SOURCE_REPO_TOKEN}@github.com/CloudBuildersOrg/Event-Management-Service.git
+          git fetch event-management ${{ inputs.source_branch }}
+
+      - name: Import or update subtree
+        run: |
+          if [ -d "${{ inputs.prefix }}" ]; then
+            echo "Prefix exists, running subtree pull..."
+            git subtree pull --prefix=${{ inputs.prefix }} event-management ${{ inputs.source_branch }} --squash
+          else
+            echo "Prefix does not exist, running subtree add..."
+            git subtree add --prefix=${{ inputs.prefix }} event-management ${{ inputs.source_branch }} --squash
+          fi
+
+      - name: Reset remotes to non-auth URLs
+        run: |
+          git remote set-url origin https://github.com/afridi2shaik-ai/dev-project.git
+          git remote set-url event-management https://github.com/CloudBuildersOrg/Event-Management-Service.git
+
+      - name: Push changes
+        env:
+          TARGET_REPO_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+        run: |
+          git remote set-url origin https://x-access-token:${TARGET_REPO_TOKEN}@github.com/afridi2shaik-ai/dev-project.git
+          git push origin HEAD:${{ inputs.target_branch }}
