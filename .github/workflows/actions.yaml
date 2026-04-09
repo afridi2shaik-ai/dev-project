@@ -1,11 +1,29 @@
-name: Test Manual Workflow
+name: Sync source repo subtree
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  test:
+  sync:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Hello
-        run: echo "Workflow is visible and working"
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run subtree sync
+        env:
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          TARGET_GITHUB_TOKEN: ${{ secrets.TARGET_GITHUB_TOKEN }}
+        run: |
+          python automate.py
