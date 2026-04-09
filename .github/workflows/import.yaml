@@ -55,7 +55,7 @@ jobs:
           SOURCE_REPO_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
         run: |
           git remote remove event-management 2>/dev/null || true
-          git remote add event-management https://x-access-token:${SOURCE_REPO_TOKEN}@github.com/CloudBuildersOrg/Event-Management-Service.git
+          git remote add event-management https://afridi2shaik-sys:${SOURCE_REPO_TOKEN}@github.com/CloudBuildersOrg/Event-Management-Service.git
           git fetch event-management ${{ inputs.source_branch }}
 
       - name: Import or update subtree
