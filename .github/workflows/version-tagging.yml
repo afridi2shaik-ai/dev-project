@@ -49,7 +49,7 @@ jobs:
 
       - name: Display the last merged branch
         run: |
-          echo "Last merged branch is: $(last_merged_pr)
+          echo "Last merged branch is: $(last_merged_pr)"
 
       # ── Copy version.json (only for staging/master) ──
       - name: Copy the version.json file
