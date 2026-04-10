@@ -131,11 +131,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-          gh release create "$RELEASE_TAG" \
-          --repo="$GITHUB_REPOSITORY" \
-          --title="Release ${RELEASE_TAG#v}" \
-          --generate-notes \
-          --target "$BRANCH_NAME"
+          if gh release view "$RELEASE_TAG" --repo="$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists. Skipping creation."
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="Release ${RELEASE_TAG#v}" \
+              --generate-notes \
+              --target "$BRANCH_NAME"
+          fi
 
       - name: Extract Release Notes and URL
         if: github.ref_name != 'dev'
