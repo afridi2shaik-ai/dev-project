@@ -206,7 +206,7 @@ jobs:
           git checkout release
           cd ..
           VERSION_FILE="meta-repo-release/version.json"
-          CURRENT_VERSION=$(jq -r '.sandbox-us.patch_version' "$VERSION_FILE")
+          CURRENT_VERSION=$(jq -r '."sandbox-us".patch_version' "$VERSION_FILE")
           BASE_VERSION=$(echo $CURRENT_VERSION | cut -d'-' -f1)
           RC_VERSION=$(echo $CURRENT_VERSION | grep -oP '(?<=-RC)\d+')
           MAJOR=$(echo $BASE_VERSION | cut -d'.' -f1)
@@ -239,7 +239,7 @@ jobs:
           git checkout release
           cd ..
           VERSION_FILE="meta-repo-release/version.json"
-          CURRENT_VERSION=$(jq -r '.main.patch_version' "$VERSION_FILE")
+          CURRENT_VERSION=$(jq -r '."main".patch_version' "$VERSION_FILE")
           BASE_VERSION=$(echo "$CURRENT_VERSION" | cut -d'-' -f1)
           MAJOR=$(echo "$BASE_VERSION" | cut -d'.' -f1)
           MINOR=$(echo "$BASE_VERSION" | cut -d'.' -f2)
