@@ -71,7 +71,7 @@ jobs:
           # PR_BRANCH is already set from previous step (do NOT use github.base_ref)
           VERSION_FILE="version.json"
           echo "BRANCH_NAME=$BRANCH_NAME"
-          echo "PR_BRANCH=$(last_merged_pr)
+          echo "PR_BRANCH=$(last_merged_pr)"
 
           if [ ! -f "$VERSION_FILE" ]; then
             echo "$VERSION_FILE not found. Exiting..."
@@ -82,13 +82,13 @@ jobs:
           echo "Attempting primary version logic..."
           set +e
           if [ "$BRANCH_NAME" == "main" ]; then
-            if [ "$(last_merged_pr) == "sandbox-us" ]; then
+            if [ "PR_BRANCH" == "sandbox-us" ]; then
               RELEASE_TAG=$(jq -r '.main.next_version' "$VERSION_FILE")
             else
               RELEASE_TAG=$(jq -r '.main.patch_version' "$VERSION_FILE")
             fi
           elif [ "$BRANCH_NAME" == "sandbox-us" ]; then
-            if [ "$(last_merged_pr) == "dev" ]; then
+            if [ "PR_BRANCH" == "dev" ]; then
               RELEASE_TAG=$(jq -r '.sandbox-us.next_version' "$VERSION_FILE")
             else
               RELEASE_TAG=$(jq -r --arg branch "$BRANCH_NAME" '.[$branch].patch_version' "$VERSION_FILE")
@@ -102,7 +102,7 @@ jobs:
             if [ "$BRANCH_NAME" == "main" ]; then
               RELEASE_TAG=$(jq -r '.main.release_version' "$VERSION_FILE")
             elif [ "$BRANCH_NAME" == "sandbox-us" ]; then
-              if [ "$(last_merged_pr) == "dev" ]; then
+              if [ "PR_BRANCH" == "dev" ]; then
                 RELEASE_TAG=$(jq -r '.sandbox-us.release_version' "$VERSION_FILE")
               else
                 RELEASE_TAG=$(jq -r --arg branch "$BRANCH_NAME" '.[$branch].release_version' "$VERSION_FILE")
@@ -117,7 +117,7 @@ jobs:
 
           echo "Final RELEASE_TAG=$RELEASE_TAG"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "PR_BRANCH=$(last_merged_pr) >> "$GITHUB_ENV"
+          echo "PR_BRANCH=$(last_merged_pr)" >> "$GITHUB_ENV"
           echo "BRANCH_NAME=$BRANCH_NAME" >> "$GITHUB_ENV"
 
       - name: Install GH CLI
