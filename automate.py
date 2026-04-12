@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-
-
-
 """
 Sync a private source repository into a private target repository using git subtree.
 

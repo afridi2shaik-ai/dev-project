@@ -81,14 +81,14 @@ jobs:
 
           echo "Attempting primary version logic..."
           set +e
-          if [ "$BRANCH_NAME" == "main" ]; then
-            if [ "PR_BRANCH" == "sandbox-us" ]; then
+          if [ "$BRANCH_NAME" = "main" ]; then
+            if [ "$PR_BRANCH" = "sandbox-us" ]; then
               RELEASE_TAG=$(jq -r '.main.next_version' "$VERSION_FILE")
             else
               RELEASE_TAG=$(jq -r '.main.patch_version' "$VERSION_FILE")
             fi
-          elif [ "$BRANCH_NAME" == "sandbox-us" ]; then
-            if [ "PR_BRANCH" == "dev" ]; then
+          elif [ "$BRANCH_NAME" = "sandbox-us" ]; then
+            if [ "$PR_BRANCH" = "dev" ]; then
               RELEASE_TAG=$(jq -r '.sandbox-us.next_version' "$VERSION_FILE")
             else
               RELEASE_TAG=$(jq -r --arg branch "$BRANCH_NAME" '.[$branch].patch_version' "$VERSION_FILE")
