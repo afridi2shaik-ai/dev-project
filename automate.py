@@ -60,8 +60,6 @@ def run_cmd(cmd: list[str], cwd: str | None = None) -> None:
         )
 
 
-
-
 def tokenized_url(repo_https_url: str, token: str) -> str:
     """
     Convert:
@@ -174,9 +172,6 @@ def main() -> int:
     finally:
         # Comment this out if you want to inspect the cloned repo after running
         shutil.rmtree(workdir, ignore_errors=True)
-
-
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

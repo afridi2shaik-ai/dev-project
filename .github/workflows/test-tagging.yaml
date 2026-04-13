@@ -2,12 +2,12 @@ name: version-tagging
 
 on:
   pull_request:
-    # branches:
-    #   - dev
-    #   - sandbox-us
-    #   - main
-    # types:
-    #   - closed
+    branches:
+      - dev
+      - sandbox-us
+      - main
+    types:
+      - closed
       
 jobs:
   build:
@@ -68,57 +68,48 @@ jobs:
         id: get_version_combined
         run: |
           BRANCH_NAME="${{ github.ref_name }}"
-          # PR_BRANCH is already set from previous step (do NOT use github.base_ref)
+          PR_BRANCH="${PR_BRANCH}"
           VERSION_FILE="version.json"
+
           echo "BRANCH_NAME=$BRANCH_NAME"
-          echo "PR_BRANCH=$(last_merged_pr)"
+          echo "PR_BRANCH=$PR_BRANCH"
 
-          if [ ! -f "$VERSION_FILE" ]; then
-            echo "$VERSION_FILE not found. Exiting..."
-            exit 1
-          fi
-          cat "$VERSION_FILE"
+          # Read versions
+          MAIN_PATCH=$(jq -r '.main.patch_version' $VERSION_FILE)
+          MAIN_CURRENT=$(jq -r '.main.current_version' $VERSION_FILE)
+          SANDBOX_CURRENT=$(jq -r '.["sandbox-us"].current_version' $VERSION_FILE)
 
-          echo "Attempting primary version logic..."
-          set +e
-          if [ "$BRANCH_NAME" = "main" ]; then
-            if [ "$PR_BRANCH" = "sandbox-us" ]; then
-              RELEASE_TAG=$(jq -r '.main.next_version' "$VERSION_FILE")
-            else
-              RELEASE_TAG=$(jq -r '.main.patch_version' "$VERSION_FILE")
-            fi
-          elif [ "$BRANCH_NAME" = "sandbox-us" ]; then
+          # Extract base version (remove RC)
+          BASE_SANDBOX=$(echo $SANDBOX_CURRENT | cut -d'-' -f1)
+
+          if [ "$BRANCH_NAME" = "sandbox-us" ]; then
             if [ "$PR_BRANCH" = "dev" ]; then
-              RELEASE_TAG=$(jq -r '.sandbox-us.next_version' "$VERSION_FILE")
+              # Increment RC
+              RC=$(echo $SANDBOX_CURRENT | grep -oP '(?<=RC)\d+')
+              if [ -z "$RC" ]; then RC=0; fi
+              NEW_RC=$((RC + 1))
+              RELEASE_TAG="${BASE_SANDBOX}-RC${NEW_RC}"
             else
-              RELEASE_TAG=$(jq -r --arg branch "$BRANCH_NAME" '.[$branch].patch_version' "$VERSION_FILE")
+              # fallback
+              RELEASE_TAG="$SANDBOX_CURRENT"
+            fi
+
+          elif [ "$BRANCH_NAME" = "main" ]; then
+            if [ "$PR_BRANCH" = "sandbox-us" ]; then
+              # Promote RC → final
+              RELEASE_TAG="$BASE_SANDBOX"
+            else
+              # Hotfix → patch bump
+              MAJOR=$(echo $MAIN_PATCH | cut -d'.' -f1)
+              MINOR=$(echo $MAIN_PATCH | cut -d'.' -f2)
+              PATCH=$(echo $MAIN_PATCH | cut -d'.' -f3)
+              NEW_PATCH=$((PATCH + 1))
+              RELEASE_TAG="$MAJOR.$MINOR.$NEW_PATCH"
             fi
           fi
-          set -e
 
-          # Fallback if primary logic gave nothing
-          if [ -z "$RELEASE_TAG" ] || [ "$RELEASE_TAG" == "null" ]; then
-            echo "Primary logic failed. Falling back to release_version..."
-            if [ "$BRANCH_NAME" == "main" ]; then
-              RELEASE_TAG=$(jq -r '.main.release_version' "$VERSION_FILE")
-            elif [ "$BRANCH_NAME" == "sandbox-us" ]; then
-              if [ "PR_BRANCH" == "dev" ]; then
-                RELEASE_TAG=$(jq -r '.sandbox-us.release_version' "$VERSION_FILE")
-              else
-                RELEASE_TAG=$(jq -r --arg branch "$BRANCH_NAME" '.[$branch].release_version' "$VERSION_FILE")
-              fi
-            fi
-          fi
-
-          if [ -z "$RELEASE_TAG" ] || [ "$RELEASE_TAG" == "null" ]; then
-            echo "RELEASE_TAG is null or empty. Exiting..."
-            exit 1
-          fi
-
-          echo "Final RELEASE_TAG=$RELEASE_TAG"
-          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "PR_BRANCH=$(last_merged_pr)" >> "$GITHUB_ENV"
-          echo "BRANCH_NAME=$BRANCH_NAME" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$RELEASE_TAG"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
       - name: Install GH CLI
         if: github.ref_name != 'dev'
@@ -210,6 +201,7 @@ jobs:
           git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta-repo-release
           cd meta-repo-release && git checkout release && cd ..
           VERSION_FILE="meta-repo-release/version.json"
+          
           CURRENT_VERSION=$(jq -r '."sandbox-us".patch_version' "$VERSION_FILE")
           BASE_VERSION=$(echo $CURRENT_VERSION | cut -d'-' -f1)
           RC_VERSION=$(echo $CURRENT_VERSION | grep -oP '(?<=-RC)\d+')
