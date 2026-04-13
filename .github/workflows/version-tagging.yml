@@ -311,6 +311,9 @@ on:
     types:
       - closed
 
+permissions:
+  contents: write
+  
 jobs:
   versioning:
     runs-on: ubuntu-24.04
