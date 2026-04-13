@@ -360,26 +360,22 @@ jobs:
       - name: Generate version
         id: bump
         run: |
-          TAG=${{ steps.get_tag.outputs.latest_tag }}
+          TAG="${{ steps.get_tag.outputs.latest_tag }}"
+          TYPE="${{ steps.release_type.outputs.type }}"
 
-          TYPE=${{ steps.release_type.outputs.type }}
           echo "Release type: $TYPE"
 
-          # Extract base version (remove rc if exists)
-          BASE_TAG=$(echo $TAG | sed 's/-rc.*//')
+          BASE_TAG=$(echo "$TAG" | sed 's/-rc.*//')
           VERSION=${BASE_TAG#v}
 
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 
           if [[ "$TYPE" == "rc" ]]; then
-            # Find latest RC for this version
-            RC_COUNT=$(git tag | grep "^v${MAJOR}.${MINOR}.${PATCH}-rc" | wc -l)
-            RC_COUNT=$((RC_COUNT+1))
-
-            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}-rc.${RC_COUNT}"
+            COUNT=$(git tag | grep "^v${MAJOR}.${MINOR}.${PATCH}-rc" | wc -l)
+            COUNT=$((COUNT+1))
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}-rc.${COUNT}"
 
           elif [[ "$TYPE" == "release" ]]; then
-            # Remove rc and finalize version
             NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
 
           elif [[ "$TYPE" == "patch" ]]; then
@@ -387,7 +383,7 @@ jobs:
             NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
 
           else
-            echo "No release needed"
+            echo "No release required"
             echo "new_tag=skip" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -401,9 +397,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git tag ${{ steps.bump.outputs.new_tag }}
-          git push origin ${{ steps.bump.outputs.new_tag }}
+          git tag "${{ steps.bump.outputs.new_tag }}"
+          git push origin "${{ steps.bump.outputs.new_tag }}"
 
       - name: Print final version
         if: steps.bump.outputs.new_tag != 'skip'
-        run: echo "✅ Released version: ${{ steps.bump.outputs.new_tag }}"
+        run: echo "Released version: ${{ steps.bump.outputs.new_tag }}"
