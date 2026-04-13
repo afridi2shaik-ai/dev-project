@@ -89,9 +89,9 @@ jobs:
             fi
           elif [ "$BRANCH_NAME" = "sandbox-us" ]; then
             if [ "$PR_BRANCH" = "dev" ]; then
-              RELEASE_TAG=$(jq -r '.sandbox-us.next_version' "$VERSION_FILE")
+              RELEASE_TAG=$(jq -r '.["sandbox-us"].next_version' "$VERSION_FILE")
             else
-              RELEASE_TAG=$(jq -r --arg branch "$BRANCH_NAME" '.[$branch].patch_version' "$VERSION_FILE")
+              RELEASE_TAG=$(jq -r '.["sandbox-us"].patch_version' "$VERSION_FILE")
             fi
           fi
           set -e
@@ -102,7 +102,7 @@ jobs:
             if [ "$BRANCH_NAME" == "main" ]; then
               RELEASE_TAG=$(jq -r '.main.release_version' "$VERSION_FILE")
             elif [ "$BRANCH_NAME" == "sandbox-us" ]; then
-              if [ "PR_BRANCH" == "dev" ]; then
+              if [ "$PR_BRANCH" == "dev" ]; then
                 RELEASE_TAG=$(jq -r '.sandbox-us.release_version' "$VERSION_FILE")
               else
                 RELEASE_TAG=$(jq -r --arg branch "$BRANCH_NAME" '.[$branch].release_version' "$VERSION_FILE")
