@@ -115,6 +115,7 @@ jobs:
 
       - name: Push metadata to meta repo
         run: |
+          rm -rf meta
           git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
           cd meta
           git checkout $BRANCH_NAME || git checkout -b $BRANCH_NAME
@@ -133,6 +134,7 @@ jobs:
       - name: Update version.json
         if: github.ref_name != 'dev'
         run: |
+          rm -rf meta
           git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
           cd meta
           git checkout release
