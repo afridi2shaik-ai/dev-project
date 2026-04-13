@@ -305,61 +305,73 @@ name: version-tagging
 on:
   pull_request:
     branches:
-      - dev
-      - sandbox-us
       - main
+      - sandbox-us
+      - dev
     types:
       - closed
 
-jobs:      
+jobs:
   versioning:
     runs-on: ubuntu-24.04
     if: github.event.pull_request.merged == true
-  
+
     outputs:
       new_tag: ${{ steps.bump.outputs.new_tag }}
-  
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-  
+
+      - name: Fetch all tags
+        run: git fetch --tags
+
       - name: Get latest tag
         id: get_tag
         run: |
-          git fetch --tags
           TAG=$(git tag --sort=-v:refname | head -n 1)
           if [ -z "$TAG" ]; then
             TAG="v0.0.0"
           fi
+          echo "Latest tag: $TAG"
           echo "latest_tag=$TAG" >> $GITHUB_OUTPUT
-  
+
       - name: Decide version bump type
         id: bump_type
         run: |
-          BASE="${{ github.base_ref }}"
-          HEAD="${{ github.head_ref }}"
-  
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
           echo "Base branch: $BASE"
           echo "Head branch: $HEAD"
-  
-          if [[ "$BASE" == "main" && "$HEAD" == "sandbox-us" ]]; then
+
+          # Minor cases
+          if [[ "$BASE" == "sandbox-us" && "$HEAD" == "dev" ]]; then
             echo "bump=minor" >> $GITHUB_OUTPUT
-          elif [[ "$BASE" == "main" && "$HEAD" == hotfix/* ]]; then
+          elif [[ "$BASE" == "main" && "$HEAD" == "sandbox-us" ]]; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+
+          # Patch cases (any other merge into main or sandbox-us)
+          elif [[ "$BASE" == "main" || "$BASE" == "sandbox-us" ]]; then
             echo "bump=patch" >> $GITHUB_OUTPUT
+
           else
             echo "bump=none" >> $GITHUB_OUTPUT
           fi
-  
+
       - name: Bump version
         id: bump
         run: |
           TAG=${{ steps.get_tag.outputs.latest_tag }}
           TAG=${TAG#v}
-  
+
           IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG"
-  
+
+          echo "Current version: v$MAJOR.$MINOR.$PATCH"
+          echo "Bump type: ${{ steps.bump_type.outputs.bump }}"
+
           if [[ "${{ steps.bump_type.outputs.bump }}" == "minor" ]]; then
             MINOR=$((MINOR+1))
             PATCH=0
@@ -370,15 +382,22 @@ jobs:
             echo "new_tag=skip" >> $GITHUB_OUTPUT
             exit 0
           fi
-  
+
           NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+
+          echo "New version: $NEW_TAG"
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
-  
+
       - name: Create and push tag
         if: steps.bump.outputs.new_tag != 'skip'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-  
+
           git tag ${{ steps.bump.outputs.new_tag }}
           git push origin ${{ steps.bump.outputs.new_tag }}
+
+      - name: Print final version
+        if: steps.bump.outputs.new_tag != 'skip'
+        run: |
+          echo "✅ Released version: ${{ steps.bump.outputs.new_tag }}"
