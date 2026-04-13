@@ -344,7 +344,7 @@ jobs:
           echo "Base branch: $BASE"
           echo "Head branch: $HEAD"
   
-          if [[ "$BASE" == "main" && "$HEAD" == "staging" ]]; then
+          if [[ "$BASE" == "main" && "$HEAD" == "sandbox-us" ]]; then
             echo "bump=minor" >> $GITHUB_OUTPUT
           elif [[ "$BASE" == "main" && "$HEAD" == hotfix/* ]]; then
             echo "bump=patch" >> $GITHUB_OUTPUT
