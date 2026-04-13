@@ -19,7 +19,7 @@ jobs:
           echo "SOURCE_BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
           echo "TARGET_BRANCH=${{ github.event.pull_request.base.ref }}" >> $GITHUB_ENV
 
-      - name: Clone meta repo (version.json)
+      - name: Clone meta repo (versiontest.json)
         run: |
           git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
           cd meta
@@ -28,7 +28,7 @@ jobs:
 
       - name: Read versions
         run: |
-          VERSION_FILE="meta/version.json"
+          VERSION_FILE="meta/versiontest.json"
 
           MAIN_VERSION=$(jq -r '.main.current_version' $VERSION_FILE)
           SANDBOX_VERSION=$(jq -r '.["sandbox-us"].current_version' $VERSION_FILE)
@@ -52,7 +52,7 @@ jobs:
 
           jq --arg v "$RELEASE_TAG" \
           '.["sandbox-us"].current_version = $v' \
-          meta/version.json > tmp && mv tmp meta/version.json
+          meta/versiontest.json > tmp && mv tmp meta/versiontest.json
 
       # 🟢 SANDBOX → MAIN (minor release)
       - name: Sandbox → Main (minor release)
@@ -76,7 +76,7 @@ jobs:
              --arg sandbox "$NEXT_SANDBOX" \
           '.main.current_version = $main |
            .["sandbox-us"].current_version = $sandbox' \
-          meta/version.json > tmp && mv tmp meta/version.json
+          meta/versiontest.json > tmp && mv tmp meta/versiontest.json
 
       # 🔴 HOTFIX → MAIN (patch)
       - name: Hotfix → Main (patch)
@@ -94,7 +94,7 @@ jobs:
 
           jq --arg v "$RELEASE_TAG" \
           '.main.current_version = $v' \
-          meta/version.json > tmp && mv tmp meta/version.json
+          meta/versiontest.json > tmp && mv tmp meta/versiontest.json
 
       # 🏷️ Create GitHub Release
       - name: Create Release
@@ -118,6 +118,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add version.json
+          git add versiontest.json
           git commit -m "Update version to $RELEASE_TAG" || echo "No changes"
           git push origin release
