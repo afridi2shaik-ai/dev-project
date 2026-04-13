@@ -1,4 +1,4 @@
-name: version-tagging
+name: version-tagging-test
 
 on:
   pull_request:
