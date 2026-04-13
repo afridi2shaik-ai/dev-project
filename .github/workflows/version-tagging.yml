@@ -120,6 +120,12 @@ jobs:
           echo "PR_BRANCH=$(last_merged_pr)" >> "$GITHUB_ENV"
           echo "BRANCH_NAME=$BRANCH_NAME" >> "$GITHUB_ENV"
 
+          echo ""
+          echo "============================================"
+          echo "✅ FINAL RELEASE VERSION DETERMINED: $RELEASE_TAG"
+          echo "============================================"
+          echo ""
+          
       - name: Install GH CLI
         if: github.ref_name != 'dev'
         uses: dev-hanz-ops/install-gh-cli-action@v0.1.0
