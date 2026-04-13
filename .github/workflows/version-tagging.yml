@@ -2,12 +2,12 @@ name: version-tagging
 
 on:
   pull_request:
-    branches:
-      - dev
-      - sandbox-us
-      - main
-    types:
-      - closed
+    # branches:
+    #   - dev
+    #   - sandbox-us
+    #   - main
+    # types:
+    #   - closed
       
 jobs:
   build:
