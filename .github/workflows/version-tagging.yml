@@ -313,14 +313,11 @@ on:
 
 permissions:
   contents: write
-  
+
 jobs:
   versioning:
     runs-on: ubuntu-24.04
     if: github.event.pull_request.merged == true
-
-    outputs:
-      new_tag: ${{ steps.bump.outputs.new_tag }}
 
     steps:
       - name: Checkout repo
@@ -338,55 +335,62 @@ jobs:
           if [ -z "$TAG" ]; then
             TAG="v0.0.0"
           fi
-          echo "Latest tag: $TAG"
           echo "latest_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $TAG"
 
-      - name: Decide version bump type
-        id: bump_type
+      - name: Decide release type
+        id: release_type
         run: |
           BASE="${{ github.event.pull_request.base.ref }}"
           HEAD="${{ github.event.pull_request.head.ref }}"
 
-          echo "Base branch: $BASE"
-          echo "Head branch: $HEAD"
+          echo "Base: $BASE"
+          echo "Head: $HEAD"
 
-          # Minor cases
           if [[ "$BASE" == "sandbox-us" && "$HEAD" == "dev" ]]; then
-            echo "bump=minor" >> $GITHUB_OUTPUT
+            echo "type=rc" >> $GITHUB_OUTPUT
           elif [[ "$BASE" == "main" && "$HEAD" == "sandbox-us" ]]; then
-            echo "bump=minor" >> $GITHUB_OUTPUT
-
-          # Patch cases (any other merge into main or sandbox-us)
+            echo "type=release" >> $GITHUB_OUTPUT
           elif [[ "$BASE" == "main" || "$BASE" == "sandbox-us" ]]; then
-            echo "bump=patch" >> $GITHUB_OUTPUT
-
+            echo "type=patch" >> $GITHUB_OUTPUT
           else
-            echo "bump=none" >> $GITHUB_OUTPUT
+            echo "type=none" >> $GITHUB_OUTPUT
           fi
 
-      - name: Bump version
+      - name: Generate version
         id: bump
         run: |
           TAG=${{ steps.get_tag.outputs.latest_tag }}
-          TAG=${TAG#v}
 
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG"
+          TYPE=${{ steps.release_type.outputs.type }}
+          echo "Release type: $TYPE"
 
-          echo "Current version: v$MAJOR.$MINOR.$PATCH"
-          echo "Bump type: ${{ steps.bump_type.outputs.bump }}"
+          # Extract base version (remove rc if exists)
+          BASE_TAG=$(echo $TAG | sed 's/-rc.*//')
+          VERSION=${BASE_TAG#v}
 
-          if [[ "${{ steps.bump_type.outputs.bump }}" == "minor" ]]; then
-            MINOR=$((MINOR+1))
-            PATCH=0
-          elif [[ "${{ steps.bump_type.outputs.bump }}" == "patch" ]]; then
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          if [[ "$TYPE" == "rc" ]]; then
+            # Find latest RC for this version
+            RC_COUNT=$(git tag | grep "^v${MAJOR}.${MINOR}.${PATCH}-rc" | wc -l)
+            RC_COUNT=$((RC_COUNT+1))
+
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}-rc.${RC_COUNT}"
+
+          elif [[ "$TYPE" == "release" ]]; then
+            # Remove rc and finalize version
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+
+          elif [[ "$TYPE" == "patch" ]]; then
             PATCH=$((PATCH+1))
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+
           else
-            echo "No version bump required"
+            echo "No release needed"
             echo "new_tag=skip" >> $GITHUB_OUTPUT
             exit 0
           fi
-
-          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
 
           echo "New version: $NEW_TAG"
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
@@ -402,5 +406,4 @@ jobs:
 
       - name: Print final version
         if: steps.bump.outputs.new_tag != 'skip'
-        run: |
-          echo "✅ Released version: ${{ steps.bump.outputs.new_tag }}"
+        run: echo "✅ Released version: ${{ steps.bump.outputs.new_tag }}"
