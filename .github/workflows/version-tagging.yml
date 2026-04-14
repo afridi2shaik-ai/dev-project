@@ -53,44 +53,86 @@ jobs:
         if: github.ref_name != 'dev'
         run: |
           VERSION_FILE="version.json"
+          
+          # Initialize versions gracefully
+          MAIN_VERSION=$(jq -r '.main.version // "0.0.0"' $VERSION_FILE)
+          if [[ "$MAIN_VERSION" == "null" ]]; then MAIN_VERSION="0.0.0"; fi
+          IFS='.' read -r M_MAJOR M_MINOR M_PATCH <<< "$MAIN_VERSION"
 
-          CURRENT_VERSION=$(jq -r --arg b "$BRANCH_NAME" '.[$b].version' $VERSION_FILE)
-          echo "Current version: $CURRENT_VERSION"
-
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-
-          BUMP="patch"
-
-          # sandbox-us → main = minor
-          if [[ "$BRANCH_NAME" == "main" && "$PR_BRANCH" == "sandbox-us" ]]; then
-            BUMP="minor"
-          fi
-
-          # optional major via commit msg
-          if git log -1 --pretty=%B | grep -q "#major"; then
-            BUMP="major"
-          fi
-
-          echo "BUMP TYPE: $BUMP"
-
-          if [[ "$BUMP" == "major" ]]; then
-            MAJOR=$((MAJOR+1))
-            MINOR=0
-            PATCH=0
-          elif [[ "$BUMP" == "minor" ]]; then
-            MINOR=$((MINOR+1))
-            PATCH=0
-          else
-            PATCH=$((PATCH+1))
-          fi
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-
-          # RC for sandbox
           if [[ "$BRANCH_NAME" == "sandbox-us" ]]; then
-            RC_COUNT=$(git tag | grep "$NEW_VERSION-rc" | wc -l || true)
-            RC_COUNT=$((RC_COUNT+1))
-            NEW_VERSION="${NEW_VERSION}_rc${RC_COUNT}"
+            CURRENT_SANDBOX=$(jq -r '."sandbox-us".version // "0.0.0"' $VERSION_FILE)
+            if [[ "$CURRENT_SANDBOX" == "null" ]]; then CURRENT_SANDBOX="0.0.0"; fi
+            CURRENT_SANDBOX_BASE="${CURRENT_SANDBOX%_rc*}"
+
+            # Determine base target for sandbox-us (minor bump by default)
+            TARGET_MAJOR=$M_MAJOR
+            TARGET_MINOR=$((M_MINOR+1))
+            TARGET_PATCH=0
+
+            if git log -1 --pretty=%B | grep -q "#major"; then
+              TARGET_MAJOR=$((M_MAJOR+1))
+              TARGET_MINOR=0
+              TARGET_PATCH=0
+            fi
+
+            TARGET_BASE="$TARGET_MAJOR.$TARGET_MINOR.$TARGET_PATCH"
+
+            COMP=$(python -c "
+            v1=[int(x) for x in '$CURRENT_SANDBOX_BASE'.split('.')]
+            v2=[int(x) for x in '$TARGET_BASE'.split('.')]
+            if v1 > v2: print('gt')
+            elif v1 < v2: print('lt')
+            else: print('eq')
+            ")
+
+            if [[ "$COMP" == "gt" ]]; then
+               BASE_VERSION=$CURRENT_SANDBOX_BASE
+            else
+               BASE_VERSION=$TARGET_BASE
+            fi
+
+            # Check if RC count needs to be incremented or reset
+            if [[ "$CURRENT_SANDBOX_BASE" == "$BASE_VERSION" ]]; then
+               if [[ "$CURRENT_SANDBOX" == *"_rc"* ]]; then
+                  CURRENT_RC="${CURRENT_SANDBOX##*_rc}"
+                  RC_COUNT=$((CURRENT_RC+1))
+               else
+                  RC_COUNT=1
+               fi
+            else
+               RC_COUNT=1
+            fi
+            
+            NEW_VERSION="${BASE_VERSION}_rc${RC_COUNT}"
+
+          elif [[ "$BRANCH_NAME" == "main" ]]; then
+            if [[ "$PR_BRANCH" == "sandbox-us" ]]; then
+               # Minor bump logic inherently, take the target base from sandbox-us
+               CURRENT_SANDBOX=$(jq -r '."sandbox-us".version // "0.0.0"' $VERSION_FILE)
+               if [[ "$CURRENT_SANDBOX" == "null" ]]; then CURRENT_SANDBOX="0.0.0"; fi
+               CURRENT_SANDBOX_BASE="${CURRENT_SANDBOX%_rc*}"
+
+               COMP=$(python -c "
+              v1=[int(x) for x in '$CURRENT_SANDBOX_BASE'.split('.')]
+              v2=[int(x) for x in '$MAIN_VERSION'.split('.')]
+              if v1 > v2: print('gt')
+              else: print('le')
+              ")
+               if [[ "$COMP" == "gt" ]]; then
+                 NEW_VERSION="$CURRENT_SANDBOX_BASE"
+               else
+                 NEW_VERSION="$M_MAJOR.$((M_MINOR+1)).0"
+               fi
+            else
+               # Hotfix / normal PR to main logic
+               if git log -1 --pretty=%B | grep -q "#major"; then
+                  NEW_VERSION="$((M_MAJOR+1)).0.0"
+               elif git log -1 --pretty=%B | grep -q "#minor"; then
+                  NEW_VERSION="$M_MAJOR.$((M_MINOR+1)).0"
+               else
+                  NEW_VERSION="$M_MAJOR.$M_MINOR.$((M_PATCH+1))"
+               fi
+            fi
           fi
 
           echo "RELEASE_TAG=$NEW_VERSION" >> $GITHUB_ENV
