@@ -8,179 +8,159 @@ on:
       - main
     types:
       - closed
-
+      
 jobs:
   build:
+    # ONLY act if the PR was actually merged, ignore closed-but-discarded PRs
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-latest   # Change to eks_runner if you use self-hosted runners
     permissions:
       contents: write
+      issues: write
+      pull-requests: read
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set variables
-        shell: bash
+      - name: Setup environment variables
         run: |
-          echo "BRANCH_NAME=${{ github.base_ref }}" >> $GITHUB_ENV
+          echo "PR_TARGET=${{ github.event.pull_request.base.ref }}" >> $GITHUB_ENV
+          echo "PR_SOURCE=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+          echo "PR_LABELS=${{ join(github.event.pull_request.labels.*.name, ' ') }}" >> $GITHUB_ENV
+          git rev-parse --short HEAD > commit_id.txt
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      # ── DEV shortcut ──
-      - name: Dev version
-        if: env.BRANCH_NAME == 'dev'
+      - name: Determine & Bump Version
         run: |
-          echo "RELEASE_TAG=dev-${COMMIT_ID}" >> $GITHUB_ENV
-
-      # ── Get PR source branch ──
-      - name: Get PR source branch
-        if: env.BRANCH_NAME != 'dev'
-        run: |
-          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
-          echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
-          echo "PR_BRANCH=$PR_BRANCH"
-
-      # ── Get version.json ──
-      - name: Pull version.json
-        if: env.BRANCH_NAME != 'dev'
-        run: |
-          git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
-          cd meta
-          git checkout release
-          cd ..
-          cp meta/version.json .
-
-      # ── VERSION CALCULATION ──
-      - name: Calculate next version
-        if: env.BRANCH_NAME != 'dev'
-        shell: bash
-        run: |
-          VERSION_FILE="version.json"
-
-          MAIN_VERSION=$(jq -r '.main.version // "0.0.0"' $VERSION_FILE)
-          [[ "$MAIN_VERSION" == "null" ]] && MAIN_VERSION="0.0.0"
-
-          IFS='.' read -r M_MAJOR M_MINOR M_PATCH <<< "$MAIN_VERSION"
-
-          if [[ "$BRANCH_NAME" == "sandbox-us" ]]; then
-
-            CURRENT_SANDBOX=$(jq -r '."sandbox-us".version // "0.0.0"' $VERSION_FILE)
-            [[ "$CURRENT_SANDBOX" == "null" ]] && CURRENT_SANDBOX="0.0.0"
-
-            CURRENT_SANDBOX_BASE="${CURRENT_SANDBOX%_rc*}"
-
-            TARGET_MAJOR=$M_MAJOR
-            TARGET_MINOR=$((M_MINOR+1))
-            TARGET_PATCH=0
-
-            if git log -1 --pretty=%B | grep -q "#major"; then
-              TARGET_MAJOR=$((M_MAJOR+1))
-              TARGET_MINOR=0
-              TARGET_PATCH=0
-            fi
-
-            TARGET_BASE="$TARGET_MAJOR.$TARGET_MINOR.$TARGET_PATCH"
-
-            COMP=$(python -c "v1=[int(x) for x in '$CURRENT_SANDBOX_BASE'.split('.')]; v2=[int(x) for x in '$MAIN_VERSION'.split('.')]; print('gt' if v1>v2 else 'le')")
-
-            if [[ "$COMP" == "gt" ]]; then
-              BASE_VERSION=$CURRENT_SANDBOX_BASE
+          # 1. Clone the metadata repository
+          git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta-repo-version
+          cd meta-repo-version
+          
+          # 2. Checkout the release branch which holds version.json
+          git checkout release || echo "Branch 'release' not found, will create files locally."
+          
+          # 3. Create initial file if missing
+          if [ ! -f "version.json" ]; then
+            echo '{"main":{"version":"1.0.0"},"sandbox-us":{"version":"1.1.0_rc0"}}' > version.json
+          fi
+          
+          MAIN_VER=$(jq -r '.main.version // "1.0.0"' version.json | sed 's/^v//')
+          STAGING_VER=$(jq -r '."sandbox-us".version // "1.1.0_rc0"' version.json | sed 's/^v//')
+          
+          IFS='.' read -r major minor patch <<< "$MAIN_VER"
+          UPDATE_VERSION_JSON=false
+          
+          if [ "$PR_TARGET" == "main" ]; then
+            # Evaluate rules for Master/Main versioning
+            if echo "$PR_LABELS" | grep -iE "major|breaking"; then
+              echo "Major hit detected via PR labels!"
+              major=$((major + 1))
+              minor=0
+              patch=0
+            elif [ "$PR_SOURCE" == "sandbox-us" ] || [[ "$PR_SOURCE" == *"staging"* ]]; then
+              echo "Staging merged into Master -> Incrementing MINOR version."
+              minor=$((minor + 1))
+              patch=0
             else
-              BASE_VERSION=$TARGET_BASE
+              echo "Hotfix/Other merge into Master -> Incrementing PATCH version."
+              patch=$((patch + 1))
             fi
-
-            if [[ "$CURRENT_SANDBOX_BASE" == "$BASE_VERSION" ]]; then
-              if [[ "$CURRENT_SANDBOX" == *"_rc"* ]]; then
-                CURRENT_RC="${CURRENT_SANDBOX##*_rc}"
-                RC_COUNT=$((CURRENT_RC+1))
-              else
-                RC_COUNT=1
-              fi
+            
+            NEW_VERSION="${major}.${minor}.${patch}"
+            jq --arg v "$NEW_VERSION" '.main.version = $v' version.json > tmp.json && mv tmp.json version.json
+            RELEASE_TAG="v$NEW_VERSION"
+            UPDATE_VERSION_JSON=true
+            
+          elif [ "$PR_TARGET" == "sandbox-us" ]; then
+            # Evaluate rules for Staging (RC versions tracking ahead of the next minor release)
+            NEXT_MINOR=$((minor + 1))
+            EXPECTED_STAGING_BASE="${major}.${NEXT_MINOR}.0"
+            
+            CURRENT_STAGING_BASE=$(echo "$STAGING_VER" | cut -d'_' -f1)
+            CURRENT_RC=$(echo "$STAGING_VER" | grep -o 'rc[0-9]*' | sed 's/rc//' 2>/dev/null || echo "0")
+            if [ -z "$CURRENT_RC" ]; then CURRENT_RC=0; fi
+            
+            if [ "$CURRENT_STAGING_BASE" == "$EXPECTED_STAGING_BASE" ]; then
+              # Already tracking the correct minor cycle, bump the release candidate number
+              NEW_RC=$((CURRENT_RC + 1))
             else
-              RC_COUNT=1
+              # Master bumped, start a new RC cycle
+              NEW_RC=1
             fi
-
-            NEW_VERSION="${BASE_VERSION}_rc${RC_COUNT}"
-
-          elif [[ "$BRANCH_NAME" == "main" ]]; then
-
-            if [[ "$PR_BRANCH" == "sandbox-us" ]]; then
-              CURRENT_SANDBOX=$(jq -r '."sandbox-us".version // "0.0.0"' $VERSION_FILE)
-              [[ "$CURRENT_SANDBOX" == "null" ]] && CURRENT_SANDBOX="0.0.0"
-
-              CURRENT_SANDBOX_BASE="${CURRENT_SANDBOX%_rc*}"
-
-              COMP=$(python -c "v1=[int(x) for x in '$CURRENT_SANDBOX_BASE'.split('.')]; v2=[int(x) for x in '$MAIN_VERSION'.split('.')]; print('gt' if v1>v2 else 'le')")
-
-              if [[ "$COMP" == "gt" ]]; then
-                NEW_VERSION="$CURRENT_SANDBOX_BASE"
-              else
-                NEW_VERSION="$M_MAJOR.$((M_MINOR+1)).0"
-              fi
-            else
-              if git log -1 --pretty=%B | grep -q "#major"; then
-                NEW_VERSION="$((M_MAJOR+1)).0.0"
-              elif git log -1 --pretty=%B | grep -q "#minor"; then
-                NEW_VERSION="$M_MAJOR.$((M_MINOR+1)).0"
-              else
-                NEW_VERSION="$M_MAJOR.$M_MINOR.$((M_PATCH+1))"
-              fi
-            fi
+            
+            NEW_VERSION="${EXPECTED_STAGING_BASE}_rc${NEW_RC}"
+            jq --arg v "$NEW_VERSION" '."sandbox-us".version = $v' version.json > tmp.json && mv tmp.json version.json
+            RELEASE_TAG="v$NEW_VERSION"
+            UPDATE_VERSION_JSON=true
+            
+          elif [ "$PR_TARGET" == "dev" ]; then
+            # Dev branch - internal build number, no formal semantic version push to JSON
+            RELEASE_TAG="dev-${COMMIT_ID}"
+          fi
+          
+          echo "==== FINAL COMPUTED RELEASE_TAG: $RELEASE_TAG ===="
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+          
+          # 4. Save back to the release branch
+          if [ "$UPDATE_VERSION_JSON" = true ]; then
+            git config --global user.name "github-actions"
+            git config --global user.email "github-actions@github.com"
+            git add version.json
+            git commit -m "chore: bump version to $RELEASE_TAG [skip ci]" || true
+            git push origin release || true
           fi
 
-          echo "RELEASE_TAG=$NEW_VERSION" >> $GITHUB_ENV
-          echo "NEW_VERSION=$NEW_VERSION"
-
-      # ── Create GitHub Release ──
-      - name: Create Release
-        if: env.BRANCH_NAME != 'dev'
+      - name: Create GitHub Release
+        if: env.PR_TARGET != 'dev'
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-          gh release create "$RELEASE_TAG" \
-            --title "$RELEASE_TAG" \
-            --generate-notes \
-            --target "$BRANCH_NAME" || echo "Release exists"
-
-      # ── Save metadata ──
-      - name: Prepare metadata
+          if gh release view "$RELEASE_TAG" --repo="$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists."
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="Release $RELEASE_TAG" \
+              --generate-notes \
+              --target "${{ github.event.pull_request.merge_commit_sha || github.sha }}"
+            # Brief sleep to allow GitHub API context to fully register the release
+            sleep 3
+          fi
+          
+      - name: Extract Release Notes
+        if: env.PR_TARGET != 'dev'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-          echo "Build: $GITHUB_RUN_NUMBER" > meta.json
-          echo "Commit: $COMMIT_ID" >> meta.json
+          RELEASE_URL=$(gh release view "$RELEASE_TAG" --repo="$GITHUB_REPOSITORY" --json url -q '.url' || echo "N/A")
+          gh release view "$RELEASE_TAG" --repo="$GITHUB_REPOSITORY" --json body -q '.body' > release_notes.md || echo "No notes found" > release_notes.md
+          echo "Release URL: $RELEASE_URL" > release_info.md
+          echo "Commit ID: $COMMIT_ID" >> release_info.md
+          echo "Build Number: ${{ github.run_number }}" > meta_file.json
 
-      - name: Push metadata
+      - name: Store versioning event in meta-repo env-branch
         run: |
-          rm -rf meta
-          git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
-          cd meta
-          git checkout $BRANCH_NAME || git checkout -b $BRANCH_NAME
-
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          
+          # Clone it afresh to checkout the specific target environment branch
+          git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta-repo-artifacts
+          cd meta-repo-artifacts
+          
+          # Checkout the tracking branch (dev, sandbox-us, main)
+          git checkout $PR_TARGET || git checkout -b $PR_TARGET
+          
           mkdir -p event-management/$RELEASE_TAG
-          cp ../meta.json event-management/$RELEASE_TAG/
-
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-
+          
+          if [ "$PR_TARGET" != "dev" ]; then
+            cp ../meta_file.json event-management/$RELEASE_TAG/
+            cp ../release_notes.md event-management/$RELEASE_TAG/
+            cp ../release_info.md event-management/$RELEASE_TAG/
+          else
+            cp ../commit_id.txt event-management/$RELEASE_TAG/
+          fi
+          
           git add .
-          git commit -m "Release $RELEASE_TAG (commit $COMMIT_ID)" || echo "No changes"
-          git push origin $BRANCH_NAME
-
-      # ── Update version.json ──
-      - name: Update version.json
-        if: env.BRANCH_NAME != 'dev'
-        run: |
-          rm -rf meta
-          git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
-          cd meta
-          git checkout release
-
-          jq --arg b "$BRANCH_NAME" --arg v "$NEW_VERSION" \
-            '.[$b].version = $v' version.json > tmp.json && mv tmp.json version.json
-
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-
-          git add version.json
-          git commit -m "Update $BRANCH_NAME version to $NEW_VERSION" || echo "No changes"
-          git push origin release
+          git commit -m "chore: store release artifacts for $RELEASE_TAG [skip ci]" || echo "No changes to commit"
+          git push origin $PR_TARGET || echo "Failed to push release artifacts to $PR_TARGET branch"
