@@ -11,7 +11,9 @@ on:
 
 jobs:
   build:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
 
@@ -20,27 +22,28 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set variables
+        shell: bash
         run: |
-          echo "BRANCH_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          echo "BRANCH_NAME=${{ github.base_ref }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
       # ── DEV shortcut ──
       - name: Dev version
-        if: github.ref_name == 'dev'
+        if: env.BRANCH_NAME == 'dev'
         run: |
           echo "RELEASE_TAG=dev-${COMMIT_ID}" >> $GITHUB_ENV
 
-      # ── Get last merged PR branch ──
+      # ── Get PR source branch ──
       - name: Get PR source branch
-        if: github.ref_name != 'dev'
+        if: env.BRANCH_NAME != 'dev'
         run: |
-          PR_BRANCH=$(jq -r '.pull_request.head.ref' "$GITHUB_EVENT_PATH")
+          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
           echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
           echo "PR_BRANCH=$PR_BRANCH"
 
-      # ── Get version.json from meta repo ──
+      # ── Get version.json ──
       - name: Pull version.json
-        if: github.ref_name != 'dev'
+        if: env.BRANCH_NAME != 'dev'
         run: |
           git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
           cd meta
@@ -50,47 +53,80 @@ jobs:
 
       # ── VERSION CALCULATION ──
       - name: Calculate next version
-        if: github.ref_name != 'dev'
+        if: env.BRANCH_NAME != 'dev'
+        shell: bash
         run: |
           VERSION_FILE="version.json"
 
-          CURRENT_VERSION=$(jq -r --arg b "$BRANCH_NAME" '.[$b].version' $VERSION_FILE)
-          echo "Current version: $CURRENT_VERSION"
+          MAIN_VERSION=$(jq -r '.main.version // "0.0.0"' $VERSION_FILE)
+          [[ "$MAIN_VERSION" == "null" ]] && MAIN_VERSION="0.0.0"
 
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          IFS='.' read -r M_MAJOR M_MINOR M_PATCH <<< "$MAIN_VERSION"
 
-          BUMP="patch"
-
-          # sandbox-us → main = minor
-          if [[ "$BRANCH_NAME" == "main" && "$PR_BRANCH" == "sandbox-us" ]]; then
-            BUMP="minor"
-          fi
-
-          # optional major via commit msg
-          if git log -1 --pretty=%B | grep -q "#major"; then
-            BUMP="major"
-          fi
-
-          echo "BUMP TYPE: $BUMP"
-
-          if [[ "$BUMP" == "major" ]]; then
-            MAJOR=$((MAJOR+1))
-            MINOR=0
-            PATCH=0
-          elif [[ "$BUMP" == "minor" ]]; then
-            MINOR=$((MINOR+1))
-            PATCH=0
-          else
-            PATCH=$((PATCH+1))
-          fi
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-
-          # RC for sandbox
           if [[ "$BRANCH_NAME" == "sandbox-us" ]]; then
-            RC_COUNT=$(git tag | grep "$NEW_VERSION-rc" | wc -l || true)
-            RC_COUNT=$((RC_COUNT+1))
-            NEW_VERSION="${NEW_VERSION}_rc${RC_COUNT}"
+
+            CURRENT_SANDBOX=$(jq -r '."sandbox-us".version // "0.0.0"' $VERSION_FILE)
+            [[ "$CURRENT_SANDBOX" == "null" ]] && CURRENT_SANDBOX="0.0.0"
+
+            CURRENT_SANDBOX_BASE="${CURRENT_SANDBOX%_rc*}"
+
+            TARGET_MAJOR=$M_MAJOR
+            TARGET_MINOR=$((M_MINOR+1))
+            TARGET_PATCH=0
+
+            if git log -1 --pretty=%B | grep -q "#major"; then
+              TARGET_MAJOR=$((M_MAJOR+1))
+              TARGET_MINOR=0
+              TARGET_PATCH=0
+            fi
+
+            TARGET_BASE="$TARGET_MAJOR.$TARGET_MINOR.$TARGET_PATCH"
+
+            COMP=$(python -c "v1=[int(x) for x in '$CURRENT_SANDBOX_BASE'.split('.')]; v2=[int(x) for x in '$MAIN_VERSION'.split('.')]; print('gt' if v1>v2 else 'le')")
+
+            if [[ "$COMP" == "gt" ]]; then
+              BASE_VERSION=$CURRENT_SANDBOX_BASE
+            else
+              BASE_VERSION=$TARGET_BASE
+            fi
+
+            if [[ "$CURRENT_SANDBOX_BASE" == "$BASE_VERSION" ]]; then
+              if [[ "$CURRENT_SANDBOX" == *"_rc"* ]]; then
+                CURRENT_RC="${CURRENT_SANDBOX##*_rc}"
+                RC_COUNT=$((CURRENT_RC+1))
+              else
+                RC_COUNT=1
+              fi
+            else
+              RC_COUNT=1
+            fi
+
+            NEW_VERSION="${BASE_VERSION}_rc${RC_COUNT}"
+
+          elif [[ "$BRANCH_NAME" == "main" ]]; then
+
+            if [[ "$PR_BRANCH" == "sandbox-us" ]]; then
+              CURRENT_SANDBOX=$(jq -r '."sandbox-us".version // "0.0.0"' $VERSION_FILE)
+              [[ "$CURRENT_SANDBOX" == "null" ]] && CURRENT_SANDBOX="0.0.0"
+
+              CURRENT_SANDBOX_BASE="${CURRENT_SANDBOX%_rc*}"
+
+              COMP=$(python -c "v1=[int(x) for x in '$CURRENT_SANDBOX_BASE'.split('.')]; v2=[int(x) for x in '$MAIN_VERSION'.split('.')]; print('gt' if v1>v2 else 'le')")
+
+              if [[ "$COMP" == "gt" ]]; then
+                NEW_VERSION="$CURRENT_SANDBOX_BASE"
+              else
+                NEW_VERSION="$M_MAJOR.$((M_MINOR+1)).0"
+              fi
+            else
+              if git log -1 --pretty=%B | grep -q "#major"; then
+                NEW_VERSION="$((M_MAJOR+1)).0.0"
+              elif git log -1 --pretty=%B | grep -q "#minor"; then
+                NEW_VERSION="$M_MAJOR.$((M_MINOR+1)).0"
+              else
+                NEW_VERSION="$M_MAJOR.$M_MINOR.$((M_PATCH+1))"
+              fi
+            fi
           fi
 
           echo "RELEASE_TAG=$NEW_VERSION" >> $GITHUB_ENV
@@ -98,7 +134,7 @@ jobs:
 
       # ── Create GitHub Release ──
       - name: Create Release
-        if: github.ref_name != 'dev'
+        if: env.BRANCH_NAME != 'dev'
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
@@ -113,7 +149,7 @@ jobs:
           echo "Build: $GITHUB_RUN_NUMBER" > meta.json
           echo "Commit: $COMMIT_ID" >> meta.json
 
-      - name: Push metadata to meta repo
+      - name: Push metadata
         run: |
           rm -rf meta
           git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
@@ -132,7 +168,7 @@ jobs:
 
       # ── Update version.json ──
       - name: Update version.json
-        if: github.ref_name != 'dev'
+        if: env.BRANCH_NAME != 'dev'
         run: |
           rm -rf meta
           git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/afridi2shaik-ai/meta-data.git meta
